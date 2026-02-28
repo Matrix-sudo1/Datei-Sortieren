@@ -1,21 +1,72 @@
 #!/bin/bash
 
 # ============================================
-#  Datei-Sortierer - Sortiert nach Dateityp
+#  Datei-Sortierer v2.0
+#  - Sortiert nach Dateityp
+#  - Vorschau-Modus (Dry Run)
+#  - Rueckgaengig-Funktion (Undo)
 # ============================================
 
-# Zielverzeichnis: aktuelles Verzeichnis oder als Argument übergeben
-ZIEL="${1:-.}"
+# --- Farben ---
+ROT='\033[0;31m'
+GRUEN='\033[0;32m'
+GELB='\033[1;33m'
+BLAU='\033[0;34m'
+RESET='\033[0m'
 
+# --- Standardwerte ---
+ZIEL="${1:-.}"
+DRYRUN=false
+UNDO=false
+LOGDATEI="$ZIEL/.sortier_log.txt"
+
+# --- Argumente auswerten ---
+for ARG in "$@"; do
+  case $ARG in
+    --dry-run) DRYRUN=true ;;
+    --undo)    UNDO=true ;;
+  esac
+done
+
+# --- Verzeichnis pruefen ---
 if [ ! -d "$ZIEL" ]; then
-  echo "❌ Verzeichnis '$ZIEL' nicht gefunden."
+  echo -e "${ROT}Verzeichnis '$ZIEL' nicht gefunden.${RESET}"
   exit 1
 fi
 
-echo "📂 Sortiere Dateien in: $ZIEL"
-echo "--------------------------------------------"
+# ============================================
+#  UNDO-FUNKTION
+# ============================================
+if $UNDO; then
+  if [ ! -f "$LOGDATEI" ]; then
+    echo -e "${ROT}Kein Log gefunden. Nichts zum Rueckgaengig machen.${RESET}"
+    exit 1
+  fi
 
-# Kategorien und ihre Dateiendungen
+  echo -e "${GELB}Mache letzte Sortierung rueckgaengig...${RESET}"
+  echo "--------------------------------------------"
+
+  tac "$LOGDATEI" | while IFS='|' read -r QUELLE ZIELDATEI; do
+    if [ -f "$ZIELDATEI" ]; then
+      mv "$ZIELDATEI" "$QUELLE"
+      echo -e "${GRUEN}Wiederhergestellt: $(basename "$QUELLE")${RESET}"
+    else
+      echo -e "${ROT}Nicht gefunden: $(basename "$ZIELDATEI")${RESET}"
+    fi
+  done
+
+  # Leere Ordner loeschen
+  find "$ZIEL" -mindepth 1 -type d -empty -delete
+
+  rm -f "$LOGDATEI"
+  echo "--------------------------------------------"
+  echo -e "${GRUEN}Undo abgeschlossen!${RESET}"
+  exit 0
+fi
+
+# ============================================
+#  KATEGORIEN
+# ============================================
 declare -A KATEGORIEN=(
   ["Bilder"]="jpg jpeg png gif bmp svg webp ico tiff tif"
   ["Videos"]="mp4 mkv avi mov wmv flv webm m4v mpeg mpg"
@@ -29,13 +80,23 @@ declare -A KATEGORIEN=(
   ["Schriften"]="ttf otf woff woff2"
 )
 
+# ============================================
+#  VORSCHAU oder SORTIEREN
+# ============================================
+if $DRYRUN; then
+  echo -e "${BLAU}VORSCHAU-MODUS - Es wird nichts verschoben!${RESET}"
+else
+  echo -e "${GRUEN}Sortiere Dateien in: $ZIEL${RESET}"
+  > "$LOGDATEI"
+fi
+echo "--------------------------------------------"
+
 VERSCHOBEN=0
 UEBERSPRUNGEN=0
 
-# Alle Dateien im Zielverzeichnis durchgehen (keine Unterordner)
 for DATEI in "$ZIEL"/*; do
-  # Nur Dateien verarbeiten (keine Ordner)
   [ -f "$DATEI" ] || continue
+  [ "$(basename "$DATEI")" = ".sortier_log.txt" ] && continue
 
   DATEINAME=$(basename "$DATEI")
   ENDUNG="${DATEINAME##*.}"
@@ -46,19 +107,23 @@ for DATEI in "$ZIEL"/*; do
   for KATEGORIE in "${!KATEGORIEN[@]}"; do
     for EXT in ${KATEGORIEN[$KATEGORIE]}; do
       if [ "$ENDUNG_KLEIN" = "$EXT" ]; then
-        # Zielordner erstellen falls nicht vorhanden
         ZIELORDNER="$ZIEL/$KATEGORIE"
-        mkdir -p "$ZIELORDNER"
-
-        # Datei verschieben (bei Namenskonflikt: Nummer anhängen)
         ZIELDATEI="$ZIELORDNER/$DATEINAME"
+
         if [ -e "$ZIELDATEI" ]; then
           BASENAME="${DATEINAME%.*}"
           ZIELDATEI="$ZIELORDNER/${BASENAME}_$(date +%s%N).$ENDUNG_KLEIN"
         fi
 
-        mv "$DATEI" "$ZIELDATEI"
-        echo "✅ $DATEINAME  →  $KATEGORIE/"
+        if $DRYRUN; then
+          echo -e "${BLAU}VORSCHAU: $DATEINAME  ->  $KATEGORIE/${RESET}"
+        else
+          mkdir -p "$ZIELORDNER"
+          mv "$DATEI" "$ZIELDATEI"
+          echo "$DATEI|$ZIELDATEI" >> "$LOGDATEI"
+          echo -e "${GRUEN}OK: $DATEINAME  ->  $KATEGORIE/${RESET}"
+        fi
+
         VERSCHOBEN=$((VERSCHOBEN + 1))
         GEFUNDEN=true
         break
@@ -68,15 +133,28 @@ for DATEI in "$ZIEL"/*; do
   done
 
   if ! $GEFUNDEN; then
-    # Unbekannte Dateitypen in "Sonstiges"
     ZIELORDNER="$ZIEL/Sonstiges"
-    mkdir -p "$ZIELORDNER"
-    mv "$DATEI" "$ZIELORDNER/$DATEINAME"
-    echo "📦 $DATEINAME  →  Sonstiges/"
+    ZIELDATEI="$ZIELORDNER/$DATEINAME"
+
+    if $DRYRUN; then
+      echo -e "${GELB}VORSCHAU: $DATEINAME  ->  Sonstiges/${RESET}"
+    else
+      mkdir -p "$ZIELORDNER"
+      mv "$DATEI" "$ZIELDATEI"
+      echo "$DATEI|$ZIELDATEI" >> "$LOGDATEI"
+      echo -e "${GELB}Sonstiges: $DATEINAME  ->  Sonstiges/${RESET}"
+    fi
+
     UEBERSPRUNGEN=$((UEBERSPRUNGEN + 1))
   fi
 
 done
 
 echo "--------------------------------------------"
-echo "✅ Fertig! $VERSCHOBEN Datei(en) sortiert, $UEBERSPRUNGEN in 'Sonstiges'."
+if $DRYRUN; then
+  echo -e "${BLAU}Vorschau fertig: $VERSCHOBEN Datei(en) wuerden sortiert, $UEBERSPRUNGEN nach 'Sonstiges'.${RESET}"
+  echo -e "${BLAU}Starte ohne --dry-run um wirklich zu sortieren.${RESET}"
+else
+  echo -e "${GRUEN}Fertig! $VERSCHOBEN Datei(en) sortiert, $UEBERSPRUNGEN in 'Sonstiges'.${RESET}"
+  echo -e "${GELB}Tipp: Mit --undo kannst du alles rueckgaengig machen.${RESET}"
+fi
