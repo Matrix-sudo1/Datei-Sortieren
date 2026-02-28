@@ -1,8 +1,9 @@
 #!/bin/bash
 
 # ============================================
-#  Datei-Sortierer v3.0
+#  Datei-Sortierer v4.0
 #  - Sortiert nach Dateityp
+#  - Sortiert nach Datum (Jahr/Monat)
 #  - Vorschau-Modus (--dry-run)
 #  - Rueckgaengig-Funktion (--undo)
 #  - Log anzeigen (--log)
@@ -17,30 +18,40 @@ BLAU='\033[0;34m'
 CYAN='\033[0;36m'
 RESET='\033[0m'
 
+# --- Monatsnamen ---
+monat_name() {
+  case $1 in
+    01) echo "Januar" ;; 02) echo "Februar" ;; 03) echo "Maerz" ;;
+    04) echo "April" ;; 05) echo "Mai" ;; 06) echo "Juni" ;;
+    07) echo "Juli" ;; 08) echo "August" ;; 09) echo "September" ;;
+    10) echo "Oktober" ;; 11) echo "November" ;; 12) echo "Dezember" ;;
+  esac
+}
+
 # --- Hilfe anzeigen ---
 hilfe() {
   echo -e "${CYAN}"
   echo "╔══════════════════════════════════════════╗"
-  echo "║        Datei-Sortierer v3.0              ║"
+  echo "║        Datei-Sortierer v4.0              ║"
   echo "╚══════════════════════════════════════════╝"
   echo -e "${RESET}"
   echo "Verwendung:"
   echo "  ./datei_sortieren.sh [ORDNER] [OPTIONEN]"
   echo ""
   echo "Optionen:"
-  echo "  --dry-run    Vorschau: zeigt was passieren wuerde"
-  echo "  --undo       Letzte Sortierung rueckgaengig machen"
-  echo "  --log        Log der letzten Sortierung anzeigen"
-  echo "  --config     Pfad zur Konfigurationsdatei angeben"
-  echo "  --help       Diese Hilfe anzeigen"
+  echo "  --dry-run      Vorschau: zeigt was passieren wuerde"
+  echo "  --undo         Letzte Sortierung rueckgaengig machen"
+  echo "  --log          Log der letzten Sortierung anzeigen"
+  echo "  --nach-datum   Nach Erstelldatum sortieren (Jahr/Monat)"
+  echo "  --config DATEI Eigene Konfigurationsdatei angeben"
+  echo "  --help         Diese Hilfe anzeigen"
   echo ""
   echo "Beispiele:"
   echo "  ./datei_sortieren.sh"
-  echo "  ./datei_sortieren.sh ~/Downloads"
   echo "  ./datei_sortieren.sh ~/Downloads --dry-run"
+  echo "  ./datei_sortieren.sh --nach-datum"
   echo "  ./datei_sortieren.sh --undo"
   echo "  ./datei_sortieren.sh --log"
-  echo "  ./datei_sortieren.sh --config meine_config.txt"
   exit 0
 }
 
@@ -49,17 +60,22 @@ ZIEL="."
 DRYRUN=false
 UNDO=false
 ZEIG_LOG=false
+NACH_DATUM=false
 CONFIGDATEI="$(dirname "$0")/config.txt"
-LOGDATEI=""
 
 # --- Argumente auswerten ---
+i=1
 for ARG in "$@"; do
   case $ARG in
-    --dry-run) DRYRUN=true ;;
-    --undo)    UNDO=true ;;
-    --log)     ZEIG_LOG=true ;;
-    --help)    hilfe ;;
-    --config)  shift; CONFIGDATEI="$1" ;;
+    --dry-run)    DRYRUN=true ;;
+    --undo)       UNDO=true ;;
+    --log)        ZEIG_LOG=true ;;
+    --nach-datum) NACH_DATUM=true ;;
+    --help)       hilfe ;;
+    --config)
+      shift
+      CONFIGDATEI="$1"
+      ;;
     *)
       if [ -d "$ARG" ]; then
         ZIEL="$ARG"
@@ -116,9 +132,6 @@ if $UNDO; then
   echo -e "${GELB}Mache letzte Sortierung rueckgaengig...${RESET}"
   echo "--------------------------------------------"
 
-  WIEDERHERGESTELLT=0
-  FEHLER=0
-
   tac "$LOGDATEI" | while IFS='|' read -r QUELLE ZIEL_DATEI DATUM; do
     if [ -f "$ZIEL_DATEI" ]; then
       mv "$ZIEL_DATEI" "$QUELLE"
@@ -128,12 +141,75 @@ if $UNDO; then
     fi
   done
 
-  # Leere Ordner loeschen
   find "$ZIEL" -mindepth 1 -type d -empty -delete 2>/dev/null
-
   rm -f "$LOGDATEI"
   echo "--------------------------------------------"
   echo -e "${GRUEN}Undo abgeschlossen!${RESET}"
+  exit 0
+fi
+
+# ============================================
+#  DATUM-SORTIERUNG
+# ============================================
+if $NACH_DATUM; then
+  if $DRYRUN; then
+    echo -e "${BLAU}VORSCHAU-MODUS - Es wird nichts verschoben!${RESET}"
+  else
+    echo -e "${GRUEN}Sortiere nach Datum in: $ZIEL${RESET}"
+    > "$LOGDATEI"
+  fi
+  echo "--------------------------------------------"
+
+  VERSCHOBEN=0
+  DATUM_LOG=$(date '+%d.%m.%Y %H:%M')
+
+  for DATEI in "$ZIEL"/*; do
+    [ -f "$DATEI" ] || continue
+    [ "$(basename "$DATEI")" = ".sortier_log.txt" ] && continue
+
+    DATEINAME=$(basename "$DATEI")
+
+    # Erstelldatum auslesen (Linux: birth time mit stat)
+    BIRTH=$(stat --format="%W" "$DATEI" 2>/dev/null)
+
+    # Fallback auf Aenderungsdatum falls kein Erstelldatum verfuegbar
+    if [ -z "$BIRTH" ] || [ "$BIRTH" = "0" ]; then
+      BIRTH=$(stat --format="%Y" "$DATEI")
+    fi
+
+    JAHR=$(date -d "@$BIRTH" '+%Y')
+    MONAT_NR=$(date -d "@$BIRTH" '+%m')
+    MONAT=$(monat_name "$MONAT_NR")
+
+    ZIELORDNER="$ZIEL/$JAHR/$MONAT"
+    ZIELDATEI="$ZIELORDNER/$DATEINAME"
+
+    if [ -e "$ZIELDATEI" ]; then
+      BASENAME="${DATEINAME%.*}"
+      ENDUNG="${DATEINAME##*.}"
+      ZIELDATEI="$ZIELORDNER/${BASENAME}_$(date +%s%N).$ENDUNG"
+    fi
+
+    if $DRYRUN; then
+      echo -e "${BLAU}VORSCHAU: $DATEINAME  ->  $JAHR/$MONAT/${RESET}"
+    else
+      mkdir -p "$ZIELORDNER"
+      mv "$DATEI" "$ZIELDATEI"
+      echo "$DATEI|$ZIELDATEI|$DATUM_LOG" >> "$LOGDATEI"
+      echo -e "${GRUEN}OK: $DATEINAME  ->  $JAHR/$MONAT/${RESET}"
+    fi
+
+    VERSCHOBEN=$((VERSCHOBEN + 1))
+  done
+
+  echo "--------------------------------------------"
+  if $DRYRUN; then
+    echo -e "${BLAU}Vorschau: $VERSCHOBEN Datei(en) wuerden nach Datum sortiert.${RESET}"
+    echo -e "${BLAU}Starte ohne --dry-run um wirklich zu sortieren.${RESET}"
+  else
+    echo -e "${GRUEN}Fertig! $VERSCHOBEN Datei(en) nach Datum sortiert.${RESET}"
+    echo -e "${GELB}Tipps: --undo zum Rueckgaengig machen | --log zum Anzeigen${RESET}"
+  fi
   exit 0
 fi
 
@@ -145,7 +221,6 @@ declare -A KATEGORIEN
 if [ -f "$CONFIGDATEI" ]; then
   echo -e "${CYAN}Konfiguration geladen: $CONFIGDATEI${RESET}"
   while IFS='=' read -r KATEGORIE ENDUNGEN; do
-    # Kommentare und leere Zeilen ueberspringen
     [[ "$KATEGORIE" =~ ^#.*$ ]] && continue
     [ -z "$KATEGORIE" ] && continue
     KATEGORIEN["$KATEGORIE"]="$ENDUNGEN"
@@ -167,7 +242,7 @@ else
 fi
 
 # ============================================
-#  SORTIEREN
+#  NACH DATEITYP SORTIEREN
 # ============================================
 if $DRYRUN; then
   echo -e "${BLAU}VORSCHAU-MODUS - Es wird nichts verschoben!${RESET}"
@@ -179,7 +254,7 @@ echo "--------------------------------------------"
 
 VERSCHOBEN=0
 UEBERSPRUNGEN=0
-DATUM=$(date '+%d.%m.%Y %H:%M')
+DATUM_LOG=$(date '+%d.%m.%Y %H:%M')
 
 for DATEI in "$ZIEL"/*; do
   [ -f "$DATEI" ] || continue
@@ -188,7 +263,6 @@ for DATEI in "$ZIEL"/*; do
   DATEINAME=$(basename "$DATEI")
   ENDUNG="${DATEINAME##*.}"
   ENDUNG_KLEIN=$(echo "$ENDUNG" | tr '[:upper:]' '[:lower:]')
-
   GEFUNDEN=false
 
   for KATEGORIE in "${!KATEGORIEN[@]}"; do
@@ -207,7 +281,7 @@ for DATEI in "$ZIEL"/*; do
         else
           mkdir -p "$ZIELORDNER"
           mv "$DATEI" "$ZIELDATEI"
-          echo "$DATEI|$ZIELDATEI|$DATUM" >> "$LOGDATEI"
+          echo "$DATEI|$ZIELDATEI|$DATUM_LOG" >> "$LOGDATEI"
           echo -e "${GRUEN}OK: $DATEINAME  ->  $KATEGORIE/${RESET}"
         fi
 
@@ -228,20 +302,19 @@ for DATEI in "$ZIEL"/*; do
     else
       mkdir -p "$ZIELORDNER"
       mv "$DATEI" "$ZIELDATEI"
-      echo "$DATEI|$ZIELDATEI|$DATUM" >> "$LOGDATEI"
+      echo "$DATEI|$ZIELDATEI|$DATUM_LOG" >> "$LOGDATEI"
       echo -e "${GELB}Sonstiges: $DATEINAME  ->  Sonstiges/${RESET}"
     fi
 
     UEBERSPRUNGEN=$((UEBERSPRUNGEN + 1))
   fi
-
 done
 
 echo "--------------------------------------------"
 if $DRYRUN; then
-  echo -e "${BLAU}Vorschau: $VERSCHOBEN Datei(en) wuerden sortiert, $UEBERSPRUNGEN nach 'Sonstiges'.${RESET}"
+  echo -e "${BLAU}Vorschau: $VERSCHOBEN sortiert, $UEBERSPRUNGEN nach 'Sonstiges'.${RESET}"
   echo -e "${BLAU}Starte ohne --dry-run um wirklich zu sortieren.${RESET}"
 else
   echo -e "${GRUEN}Fertig! $VERSCHOBEN Datei(en) sortiert, $UEBERSPRUNGEN in 'Sonstiges'.${RESET}"
-  echo -e "${GELB}Tipps: --undo zum Rueckgaengig machen | --log zum Anzeigen${RESET}"
+  echo -e "${GELB}Tipps: --undo | --log | --nach-datum${RESET}"
 fi
