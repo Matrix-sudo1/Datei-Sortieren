@@ -1,0 +1,16 @@
+# ============================================
+#  Datei-Sortierer - Konfiguration
+#  Format: KategorieName=endung1 endung2 endung3
+#  Zeilen mit # werden ignoriert
+# ============================================
+
+Bilder=jpg jpeg png gif bmp svg webp ico tiff tif
+Videos=mp4 mkv avi mov wmv flv webm m4v mpeg mpg
+Audio=mp3 wav flac aac ogg wma m4a opus
+Dokumente=pdf doc docx odt txt rtf md
+Tabellen=xls xlsx csv ods
+Praesentation=ppt pptx odp
+Archive=zip tar gz bz2 rar 7z xz
+Code=sh py js ts html css php java c cpp h rb go rs sql
+Ausfuehrbar=exe dmg deb rpm appimage
+Schriften=ttf otf woff woff2
