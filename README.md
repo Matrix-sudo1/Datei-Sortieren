@@ -27,7 +27,33 @@ Ein Bash-Script mit moderner GUI, das Dateien automatisch sortiert.
 python gui.py
 ```
 
-Die GUI bietet alle Features per Klick – kein Terminal nötig!
+### GUI v2.0 – Stabilitätsverbesserungen
+
+Die GUI wurde grundlegend stabiler gemacht. Folgende Probleme wurden behoben:
+
+**Mehrfachklick-Schutz**
+Alle Buttons werden automatisch gesperrt sobald ein Prozess läuft. Ein versehentlicher Doppelklick startet den Prozess nicht mehr mehrfach.
+
+**Abbrechen-Button**
+Während ein Prozess läuft erscheint automatisch ein roter "Abbrechen"-Button. Damit kann jede Aktion jederzeit sauber gestoppt werden.
+
+**Sichere Thread-Kommunikation**
+UI-Updates werden nur noch ausgeführt wenn das Fenster noch offen ist. Kein Absturz mehr beim schnellen Schließen des Programms während eine Aktion läuft.
+
+**Automatische Windows Bash-Erkennung**
+Das Programm sucht Git Bash automatisch in allen gängigen Windows-Installationspfaden. Falls Git Bash nicht gefunden wird, erscheint eine klare Fehlermeldung mit Installationslink.
+
+**Encoding-Schutz**
+Verhindert Abstürze bei Dateien mit Sonderzeichen oder Umlauten im Dateinamen.
+
+**Bessere Fehlermeldungen**
+Klare Fehlerdialoge wenn Bash, Script oder der gewählte Ordner nicht gefunden werden – statt eines Absturzes.
+
+**Sicheres Beenden**
+Wenn das Programm geschlossen wird während noch ein Prozess läuft, erscheint eine Sicherheitsfrage. Der Prozess wird sauber beendet bevor das Programm sich schließt.
+
+**Startup-Diagnose**
+Beim Start zeigt die GUI sofort an ob Bash und das Script gefunden wurden – so sieht man auf einen Blick ob alles bereit ist.
 
 ---
 
@@ -105,6 +131,7 @@ Bilder=jpg jpeg png gif heic raw
 | v4.0 | Datum-Sortierung |
 | v5.0 | Duplikate erkennen |
 | GUI v1.0 | Grafische Oberfläche mit Python |
+| GUI v2.0 | Stabilitätsverbesserungen |
 
 ---
 
