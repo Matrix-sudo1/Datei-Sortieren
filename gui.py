@@ -1,14 +1,13 @@
 #!/usr/bin/env python3
 # ============================================
-#  Datei-Sortierer GUI v4.0
-#  Stabilitätsfixes:
-#  - returncode immer definiert
-#  - root.after korrekt verwendet
-#  - Vorschau läuft im Thread (kein UI-Freeze)
-#  - Thread-Lock gegen Race Conditions
-#  - Undo-Schutz bei leerem Pfad
+#  Datei-Sortierer GUI v4.1
+#  Stabilitaetsfixes:
+#  - Vorschau-Lock (kein Doppel-Thread)
+#  - _script_schnell sperrt Buttons
+#  - Tab-Wechsel immer moeglich
+#  - Windows Encoding-Fallback (utf-8 + cp1252)
 #  - Alle TclErrors abgefangen
-#  - Speicherleck in Tabelle behoben
+#  - Thread-Lock fuer laeuft-Property
 #  - Prozess-Timeout beim Beenden
 # ============================================
 
@@ -54,16 +53,16 @@ FONT_TAB  = ("Segoe UI", 12, "bold")
 FONT_BTN  = ("Segoe UI", 13, "bold")
 
 KATEGORIEN = {
-    "Bilder":       ["jpg","jpeg","png","gif","bmp","svg","webp","tiff","tif","ico"],
-    "Videos":       ["mp4","mkv","avi","mov","wmv","flv","webm","m4v","mpeg","mpg"],
-    "Audio":        ["mp3","wav","flac","aac","ogg","wma","m4a","opus"],
-    "Dokumente":    ["pdf","doc","docx","odt","txt","rtf","md"],
-    "Tabellen":     ["xls","xlsx","csv","ods"],
-    "Praesentation":["ppt","pptx","odp"],
-    "Archive":      ["zip","tar","gz","bz2","rar","7z","xz"],
-    "Code":         ["sh","py","js","ts","html","css","php","java","c","cpp","h","rb","go","rs","sql"],
-    "Ausfuehrbar":  ["exe","dmg","deb","rpm","appimage"],
-    "Schriften":    ["ttf","otf","woff","woff2"],
+    "Bilder":        ["jpg","jpeg","png","gif","bmp","svg","webp","tiff","tif","ico","heic","raw","cr2","nef"],
+    "Videos":        ["mp4","mkv","avi","mov","wmv","flv","webm","m4v","mpeg","mpg"],
+    "Audio":         ["mp3","wav","flac","aac","ogg","wma","m4a","opus"],
+    "Dokumente":     ["pdf","doc","docx","odt","txt","rtf","md"],
+    "Tabellen":      ["xls","xlsx","csv","ods"],
+    "Praesentation": ["ppt","pptx","odp"],
+    "Archive":       ["zip","tar","gz","bz2","rar","7z","xz"],
+    "Code":          ["sh","py","js","ts","html","css","php","java","c","cpp","h","rb","go","rs","sql"],
+    "Ausfuehrbar":   ["exe","dmg","deb","rpm","appimage"],
+    "Schriften":     ["ttf","otf","woff","woff2"],
 }
 
 
@@ -87,26 +86,28 @@ class DateiSortiererApp:
         self.root.configure(bg=F["bg"])
         self.root.resizable(True, True)
 
-        # --- Zustandsvariablen ---
+        # --- Zustand ---
         self.ordner_pfad     = tk.StringVar(value="")
         self.kopieren_var    = tk.BooleanVar(value=False)
         self.unterordner_var = tk.BooleanVar(value=False)
         self._zerstoert      = False
 
-        # Thread-sicherer Zustand
-        self._lock      = threading.Lock()
-        self._laeuft    = False       # Immer über Property zugreifen
+        # FIX: Thread-sicherer Zustand mit Lock
+        self._lock        = threading.Lock()
+        self._laeuft      = False
         self.aktiver_proc = None
 
-        # Script & Bash finden
+        # FIX: Separater Lock für Vorschau (verhindert Doppel-Thread)
+        self._vorschau_laeuft = False
+        self._vorschau_lock   = threading.Lock()
+
         self.script_pfad = self._finde_script()
         self.bash_pfad   = self._finde_bash()
 
-        # UI
         self._baue_ui()
         self.root.protocol("WM_DELETE_WINDOW", self._beenden)
 
-    # --- Thread-sicherer laeuft-Zugriff ---
+    # --- Thread-sichere Properties ---
     @property
     def laeuft(self):
         with self._lock:
@@ -148,7 +149,7 @@ class DateiSortiererApp:
     #  SICHERE UI-HELFER
     # ------------------------------------------
     def _ui(self, fn, *args, **kwargs):
-        """Führt UI-Funktion nur aus wenn Fenster noch offen ist."""
+        """UI-Update nur wenn Fenster noch offen."""
         if not self._zerstoert:
             try:
                 fn(*args, **kwargs)
@@ -156,13 +157,9 @@ class DateiSortiererApp:
                 pass
 
     def _nach(self, fn, *args, **kwargs):
-        """Sicherer root.after(0, ...) Aufruf aus Threads."""
+        """Sicherer root.after aus Threads."""
         if not self._zerstoert:
             self.root.after(0, lambda: self._ui(fn, *args, **kwargs))
-
-    def _widget(self, widget, **kwargs):
-        """Sicheres widget.configure() aus Threads."""
-        self._nach(widget.configure, **kwargs)
 
     # ------------------------------------------
     #  UI AUFBAUEN
@@ -170,7 +167,6 @@ class DateiSortiererApp:
     def _baue_ui(self):
         aussen = tk.Frame(self.root, bg=F["bg"], padx=20, pady=16)
         aussen.pack(fill="both", expand=True)
-
         self._baue_titelleiste(aussen)
 
         karte = tk.Frame(aussen, bg=F["card"],
@@ -195,8 +191,7 @@ class DateiSortiererApp:
     def _baue_titelleiste(self, parent):
         leiste = tk.Frame(parent, bg=F["bg"], pady=6)
         leiste.pack(fill="x")
-        tk.Label(leiste,
-                 text="🖥  DATEI-SORTIERER V2.0 – GUI",
+        tk.Label(leiste, text="🖥  DATEI-SORTIERER V2.0 – GUI v4.1",
                  font=("Segoe UI", 13, "bold"),
                  bg=F["bg"], fg=F["text"]).pack(side="left")
 
@@ -243,9 +238,7 @@ class DateiSortiererApp:
             self.tab_buttons[key] = btn
 
     def _tab_wechseln(self, key):
-        # Verhindert Tab-Wechsel während Prozess läuft
-        if self.laeuft and key != "verlauf":
-            return
+        # FIX: Tab-Wechsel immer erlauben, auch während Prozess läuft
         try:
             for k, btn in self.tab_buttons.items():
                 btn.configure(bg=F["tab_aktiv"] if k == key else F["nav"],
@@ -254,9 +247,11 @@ class DateiSortiererApp:
                           self.frame_statistiken,
                           self.frame_verlauf]:
                 frame.pack_forget()
-            {"sortieren":   self.frame_sortieren,
-             "statistiken": self.frame_statistiken,
-             "verlauf":     self.frame_verlauf}[key].pack(fill="both", expand=True)
+            {
+                "sortieren":   self.frame_sortieren,
+                "statistiken": self.frame_statistiken,
+                "verlauf":     self.frame_verlauf,
+            }[key].pack(fill="both", expand=True)
         except tk.TclError:
             pass
 
@@ -292,18 +287,16 @@ class DateiSortiererApp:
         self._checkbox(opt, "🔄  Unterordner einbeziehen",
                        self.unterordner_var).pack(side="left")
 
-        # Vorschau-Label
+        # Vorschau
         tk.Label(self.frame_sortieren, text="VORSCHAU",
                  font=("Segoe UI", 9, "bold"),
                  bg=F["card"], fg=F["text_dim"]).pack(anchor="w", pady=(0, 4))
 
-        # Tabellen-Container mit Scrollbar
         tabelle_aussen = tk.Frame(self.frame_sortieren, bg=F["tabelle_hd"],
                                    highlightbackground=F["border"],
                                    highlightthickness=1)
         tabelle_aussen.pack(fill="both", expand=True)
 
-        # Header
         header = tk.Frame(tabelle_aussen, bg=F["tabelle_hd"])
         header.pack(fill="x")
         for text, breite in [("Dateiname", 26), ("Kategorie", 18), ("Ziel-Ordner", 22)]:
@@ -311,7 +304,6 @@ class DateiSortiererApp:
                      bg=F["tabelle_hd"], fg=F["text"],
                      width=breite, anchor="w", padx=12, pady=10).pack(side="left")
 
-        # Scrollbarer Inhaltsbereich
         canvas_rahmen = tk.Frame(tabelle_aussen, bg=F["tabelle_z1"])
         canvas_rahmen.pack(fill="both", expand=True)
 
@@ -325,9 +317,8 @@ class DateiSortiererApp:
         self.tabelle_canvas.pack(side="left", fill="both", expand=True)
 
         self.tabelle_frame = tk.Frame(self.tabelle_canvas, bg=F["tabelle_z1"])
-        self.tabelle_canvas_window = self.tabelle_canvas.create_window(
-            (0, 0), window=self.tabelle_frame, anchor="nw"
-        )
+        self._tabelle_canvas_win = self.tabelle_canvas.create_window(
+            (0, 0), window=self.tabelle_frame, anchor="nw")
         self.tabelle_frame.bind("<Configure>", self._tabelle_scroll_update)
         self.tabelle_canvas.bind("<Configure>", self._tabelle_breite_update)
 
@@ -372,7 +363,7 @@ class DateiSortiererApp:
         )
         self.reset_btn.pack(side="left")
 
-        # Abbrechen-Button (versteckt)
+        # Abbrechen (versteckt)
         self.abbruch_btn = tk.Button(
             btn_leiste, text="⬛  Abbrechen",
             font=FONT_BTN, bg=F["rot"], fg=F["text"],
@@ -391,16 +382,19 @@ class DateiSortiererApp:
     def _tabelle_breite_update(self, event):
         try:
             self.tabelle_canvas.itemconfig(
-                self.tabelle_canvas_window, width=event.width)
+                self._tabelle_canvas_win, width=event.width)
         except tk.TclError:
             pass
 
     def _tabelle_reset_leer(self):
         self._tabelle_leeren()
-        tk.Label(self.tabelle_frame,
-                 text="Klicke auf die Drop-Zone um eine Vorschau zu laden...",
-                 font=FONT, bg=F["tabelle_z1"], fg=F["text_dim"],
-                 pady=30).pack()
+        try:
+            tk.Label(self.tabelle_frame,
+                     text="Ordner auswählen oder Vorschau laden...",
+                     font=FONT, bg=F["tabelle_z1"],
+                     fg=F["text_dim"], pady=30).pack()
+        except tk.TclError:
+            pass
 
     def _tabelle_leeren(self):
         try:
@@ -409,7 +403,7 @@ class DateiSortiererApp:
         except tk.TclError:
             pass
 
-    def _tabelle_zeile_hinzufuegen(self, dateiname, kategorie, ziel, zeile_nr):
+    def _tabelle_zeile(self, dateiname, kategorie, ziel, zeile_nr):
         try:
             bg = F["tabelle_z1"] if zeile_nr % 2 == 0 else F["tabelle_z2"]
             zeile = tk.Frame(self.tabelle_frame, bg=bg)
@@ -417,7 +411,8 @@ class DateiSortiererApp:
             for text, breite in [(dateiname, 26), (kategorie, 18), (ziel, 22)]:
                 tk.Label(zeile, text=text, font=FONT,
                          bg=bg, fg=F["text"],
-                         width=breite, anchor="w", padx=12, pady=7).pack(side="left")
+                         width=breite, anchor="w",
+                         padx=12, pady=7).pack(side="left")
         except tk.TclError:
             pass
 
@@ -443,11 +438,17 @@ class DateiSortiererApp:
         return r
 
     def _buttons_sperren(self, sperren):
-        """Buttons sperren/freigeben + Abbrechen ein/ausblenden."""
         try:
             zustand = "disabled" if sperren else "normal"
-            for btn in [self.vorschau_btn, self.start_btn, self.reset_btn]:
-                btn.configure(state=zustand)
+            # FIX: hasattr-Check – undo_btn/log_btn werden erst in _baue_tab_verlauf erstellt
+            for attr in ["vorschau_btn", "start_btn", "reset_btn",
+                         "undo_btn", "log_btn"]:
+                btn = getattr(self, attr, None)
+                if btn:
+                    try:
+                        btn.configure(state=zustand)
+                    except tk.TclError:
+                        pass
             if sperren:
                 self.start_btn.configure(text="⏳  Läuft...")
                 self.abbruch_btn.pack(side="left", fill="x",
@@ -471,8 +472,7 @@ class DateiSortiererApp:
         self.stats_frame = tk.Frame(self.frame_statistiken, bg=F["card"])
         self.stats_frame.pack(fill="both", expand=True, padx=16)
         tk.Label(self.stats_frame,
-                 text="Noch keine Sortierung durchgeführt.\n"
-                      "Starte eine Sortierung um Statistiken zu sehen.",
+                 text="Noch keine Sortierung durchgeführt.",
                  font=FONT, bg=F["card"], fg=F["text_dim"], pady=40).pack()
 
     def _zeige_statistiken(self, kategorien_count):
@@ -482,12 +482,14 @@ class DateiSortiererApp:
             gesamt = sum(kategorien_count.values())
             if gesamt == 0:
                 tk.Label(self.stats_frame,
-                         text="Keine Dateien wurden sortiert.",
-                         font=FONT, bg=F["card"], fg=F["text_dim"], pady=20).pack()
+                         text="Keine Dateien sortiert.",
+                         font=FONT, bg=F["card"],
+                         fg=F["text_dim"], pady=20).pack()
                 return
             tk.Label(self.stats_frame,
-                     text=f"Letzte Sortierung: {gesamt} Datei(en) sortiert",
-                     font=FONT_BOLD, bg=F["card"], fg=F["gruen"], pady=10).pack(anchor="w")
+                     text=f"Letzte Sortierung: {gesamt} Datei(en)",
+                     font=FONT_BOLD, bg=F["card"],
+                     fg=F["gruen"], pady=10).pack(anchor="w")
             for kat, anzahl in sorted(kategorien_count.items(),
                                        key=lambda x: x[1], reverse=True):
                 zeile = tk.Frame(self.stats_frame, bg=F["card2"],
@@ -498,8 +500,8 @@ class DateiSortiererApp:
                          bg=F["card2"], fg=F["text"],
                          width=20, anchor="w", pady=8).pack(side="left")
                 breite = max(20, int(anzahl / gesamt * 280))
-                tk.Frame(zeile, bg=F["akzent"], width=breite, height=18).pack(
-                    side="left", padx=8, pady=8)
+                tk.Frame(zeile, bg=F["akzent"],
+                         width=breite, height=18).pack(side="left", padx=8, pady=8)
                 tk.Label(zeile, text=f"{anzahl}x", font=FONT_BOLD,
                          bg=F["card2"], fg=F["akzent"]).pack(side="left")
         except tk.TclError:
@@ -510,25 +512,40 @@ class DateiSortiererApp:
     # ------------------------------------------
     def _baue_tab_verlauf(self):
         self.frame_verlauf = tk.Frame(self.tab_inhalt, bg=F["card"])
+
         header = tk.Frame(self.frame_verlauf, bg=F["card"])
         header.pack(fill="x", pady=(10, 8))
         tk.Label(header, text="🕐  Verlauf",
                  font=FONT_TITEL, bg=F["card"], fg=F["text"]).pack(side="left")
 
-        btn_rahmen = tk.Frame(header, bg=F["card"])
-        btn_rahmen.pack(side="right")
+        btn_gruppe = tk.Frame(header, bg=F["card"])
+        btn_gruppe.pack(side="right")
 
-        tk.Button(btn_rahmen, text="↩ Rückgängig", font=FONT_BOLD,
-                  bg=F["akzent"], fg=F["text"],
-                  activebackground="#4a2a9a", activeforeground=F["text"],
-                  relief="flat", cursor="hand2", padx=16, pady=8,
-                  command=self._undo).pack(side="left", padx=(0, 6))
+        self.undo_btn = tk.Button(
+            btn_gruppe, text="↩ Rückgängig", font=FONT_BOLD,
+            bg=F["akzent"], fg=F["text"],
+            activebackground="#4a2a9a", activeforeground=F["text"],
+            relief="flat", cursor="hand2", padx=16, pady=8,
+            command=self._undo
+        )
+        self.undo_btn.pack(side="left", padx=(0, 6))
 
-        tk.Button(btn_rahmen, text="✕ Leeren", font=FONT_BOLD,
-                  bg=F["nav"], fg=F["text_dim"],
-                  activebackground=F["rot"], activeforeground=F["text"],
-                  relief="flat", cursor="hand2", padx=16, pady=8,
-                  command=self._verlauf_leeren).pack(side="left")
+        self.log_btn = tk.Button(
+            btn_gruppe, text="📋 Log laden", font=FONT_BOLD,
+            bg=F["nav"], fg=F["text_dim"],
+            activebackground=F["gruen"], activeforeground=F["text"],
+            relief="flat", cursor="hand2", padx=16, pady=8,
+            command=self._zeige_log
+        )
+        self.log_btn.pack(side="left", padx=(0, 6))
+
+        tk.Button(
+            btn_gruppe, text="✕ Leeren", font=FONT_BOLD,
+            bg=F["nav"], fg=F["text_dim"],
+            activebackground=F["rot"], activeforeground=F["text"],
+            relief="flat", cursor="hand2", padx=16, pady=8,
+            command=self._verlauf_leeren
+        ).pack(side="left")
 
         self.verlauf_text = tk.Text(
             self.frame_verlauf, font=("Courier New", 10),
@@ -543,13 +560,20 @@ class DateiSortiererApp:
         scrollbar.pack(side="right", fill="y")
         self.verlauf_text.pack(side="left", fill="both", expand=True)
 
-        self.verlauf_text.tag_config("gruen",  foreground=F["gruen"])
-        self.verlauf_text.tag_config("gelb",   foreground=F["gelb"])
-        self.verlauf_text.tag_config("rot",    foreground=F["rot"])
-        self.verlauf_text.tag_config("dim",    foreground=F["text_dim"])
-        self.verlauf_text.tag_config("header", foreground=F["akzent"],
-                                     font=("Courier New", 11, "bold"))
-        self._verlauf_schreiben("Verlauf wird hier angezeigt...\n", "dim")
+        for tag, farbe, extra in [
+            ("gruen",  F["gruen"],    {}),
+            ("gelb",   F["gelb"],     {}),
+            ("rot",    F["rot"],      {}),
+            ("dim",    F["text_dim"], {}),
+            ("header", F["akzent"],   {"font": ("Courier New", 11, "bold")}),
+        ]:
+            self.verlauf_text.tag_config(tag, foreground=farbe, **extra)
+
+        self._verlauf_schreiben("── Datei-Sortierer GUI v4.1 bereit ──\n", "header")
+        self._verlauf_schreiben("Warte auf Aktion...\n\n", "dim")
+
+    # FIX: Maximale Log-Größe (verhindert unbegrenztes Wachstum)
+    _LOG_MAX_ZEILEN = 2000
 
     def _verlauf_schreiben(self, text, tag=None):
         try:
@@ -558,6 +582,10 @@ class DateiSortiererApp:
                 self.verlauf_text.insert("end", text, tag)
             else:
                 self.verlauf_text.insert("end", text)
+            # FIX: Alte Zeilen entfernen wenn Limit überschritten
+            zeilen = int(self.verlauf_text.index("end-1c").split(".")[0])
+            if zeilen > self._LOG_MAX_ZEILEN:
+                self.verlauf_text.delete("1.0", f"{zeilen - self._LOG_MAX_ZEILEN}.0")
             self.verlauf_text.see("end")
             self.verlauf_text.configure(state="disabled")
         except tk.TclError:
@@ -568,7 +596,7 @@ class DateiSortiererApp:
             self.verlauf_text.configure(state="normal")
             self.verlauf_text.delete("1.0", "end")
             self.verlauf_text.configure(state="disabled")
-            self._verlauf_schreiben("Verlauf geleert.\n", "dim")
+            self._verlauf_schreiben("── Verlauf geleert ──\n", "dim")
         except tk.TclError:
             pass
 
@@ -582,15 +610,19 @@ class DateiSortiererApp:
             bar,
             text="👆  Klicke auf die Tabs um zwischen den Ansichten zu wechseln",
             font=FONT_KLEIN, bg=F["bg"], fg=F["gelb"],
-            wraplength=800, justify="left"
+            wraplength=680, justify="left"
         )
         self.status_unten.pack(side="left")
 
-        # Bash-Status
-        bash_text = f"bash: ✅" if self.bash_pfad else "bash: ❌ Git Bash installieren!"
-        bash_farbe = F["gruen"] if self.bash_pfad else F["rot"]
-        tk.Label(bar, text=bash_text, font=FONT_KLEIN,
-                 bg=F["bg"], fg=bash_farbe, padx=8).pack(side="right")
+        bash_ok = self.bash_pfad is not None
+        tk.Label(bar,
+                 text=f"bash: {'✅' if bash_ok else '❌'}",
+                 font=FONT_KLEIN, bg=F["bg"],
+                 fg=F["gruen"] if bash_ok else F["rot"],
+                 padx=8).pack(side="right")
+        tk.Label(bar, text="GUI v4.1",
+                 font=FONT_KLEIN, bg=F["bg"],
+                 fg=F["text_dim"], padx=8).pack(side="right")
 
     # ------------------------------------------
     #  AKTIONEN
@@ -622,8 +654,16 @@ class DateiSortiererApp:
         if self.laeuft:
             return
 
+        # FIX: Doppel-Thread verhinden mit eigenem Lock
+        with self._vorschau_lock:
+            if self._vorschau_laeuft:
+                return
+            self._vorschau_laeuft = True
+
         pfad = self.ordner_pfad.get()
         if not os.path.isdir(pfad):
+            with self._vorschau_lock:
+                self._vorschau_laeuft = False
             messagebox.showerror("Fehler", f"Ordner nicht gefunden:\n{pfad}")
             return
 
@@ -632,13 +672,10 @@ class DateiSortiererApp:
         self._tabelle_leeren()
 
         def _thread():
-            zeilen = []
-            fehler = None
+            zeilen, fehler = [], None
             try:
-                eintraege = sorted(os.listdir(pfad))
-                for datei in eintraege:
-                    voller_pfad = os.path.join(pfad, datei)
-                    if not os.path.isfile(voller_pfad):
+                for datei in sorted(os.listdir(pfad)):
+                    if not os.path.isfile(os.path.join(pfad, datei)):
                         continue
                     if datei.startswith("."):
                         continue
@@ -648,9 +685,11 @@ class DateiSortiererApp:
                 fehler = "❌  Kein Zugriff auf diesen Ordner."
             except Exception as e:
                 fehler = f"❌  Fehler: {e}"
+            finally:
+                with self._vorschau_lock:
+                    self._vorschau_laeuft = False
 
-            # UI-Update sicher im Hauptthread
-            def _ui_update():
+            def _update():
                 if self._zerstoert:
                     return
                 try:
@@ -662,23 +701,22 @@ class DateiSortiererApp:
                         self.status_text.configure(text=fehler, fg=F["rot"])
                     elif not zeilen:
                         tk.Label(self.tabelle_frame,
-                                 text="Keine Dateien im Ordner gefunden.",
+                                 text="Keine Dateien im Ordner.",
                                  font=FONT, bg=F["tabelle_z1"],
                                  fg=F["text_dim"], pady=20).pack()
                         self.status_text.configure(
-                            text="ℹ️  Keine Dateien gefunden.", fg=F["text_dim"])
+                            text="ℹ️  Keine Dateien.", fg=F["text_dim"])
                     else:
                         for i, (datei, kat, ziel) in enumerate(zeilen):
-                            self._tabelle_zeile_hinzufuegen(datei, kat, ziel, i)
+                            self._tabelle_zeile(datei, kat, ziel, i)
                         self.status_text.configure(
-                            text=f"✅  {len(zeilen)} Datei(en) gefunden."
-                                 f" Bereit zum Sortieren.",
+                            text=f"✅  {len(zeilen)} Datei(en) – Bereit.",
                             fg=F["gruen"])
                     self.vorschau_btn.configure(state="normal")
                 except tk.TclError:
                     pass
 
-            self._nach(_ui_update)
+            self._nach(_update)
 
         threading.Thread(target=_thread, daemon=True).start()
 
@@ -695,7 +733,6 @@ class DateiSortiererApp:
         if not os.path.isdir(pfad):
             messagebox.showerror("Fehler", f"Ordner nicht gefunden:\n{pfad}")
             return
-
         if not messagebox.askyesno("Sortieren starten",
                                     f"Dateien sortieren in:\n\n{pfad}"):
             return
@@ -706,21 +743,28 @@ class DateiSortiererApp:
         self._tab_wechseln("verlauf")
 
         kategorien_count = {}
-        returncode = -1  # FIX: immer initialisiert
+        returncode = -1
 
         def _thread():
             nonlocal returncode
             try:
-                args = [pfad]
-                cmd = [self.bash_pfad, self.script_pfad] + args
-                self.aktiver_proc = subprocess.Popen(
-                    cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
-                    text=True, encoding="utf-8", errors="replace"
-                )
+                cmd = [self.bash_pfad, self.script_pfad, pfad]
+                # FIX: Windows Encoding-Fallback
+                try:
+                    self.aktiver_proc = subprocess.Popen(
+                        cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+                        text=True, encoding="utf-8", errors="replace"
+                    )
+                except Exception:
+                    self.aktiver_proc = subprocess.Popen(
+                        cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+                        text=True, encoding="cp1252", errors="replace"
+                    )
+
                 self._nach(self._verlauf_schreiben,
                            f"\n── Sortierung gestartet ──\n", "header")
                 self._nach(self._verlauf_schreiben,
-                           f"Ordner: {pfad}\n", "dim")
+                           f"  Ordner: {pfad}\n", "dim")
 
                 for zeile in self.aktiver_proc.stdout:
                     if self._zerstoert:
@@ -728,7 +772,6 @@ class DateiSortiererApp:
                     z = zeile.strip()
                     if not z:
                         continue
-                    # Statistiken sammeln
                     if "OK:" in z and "->" in z:
                         try:
                             kat = z.split("->")[1].strip().rstrip("/").strip()
@@ -736,18 +779,18 @@ class DateiSortiererApp:
                         except Exception:
                             pass
                     tag = ("gruen" if any(w in z for w in ["OK:", "Fertig", "Wiederhergestellt"])
-                           else "gelb" if "Sonstiges" in z or "Tipp" in z
+                           else "gelb" if any(w in z for w in ["Sonstiges", "IGNORIERT", "Tipp"])
                            else "rot"  if any(w in z for w in ["Fehler", "ERROR"])
                            else None)
                     self._nach(self._verlauf_schreiben, f"  {z}\n", tag)
 
                 self.aktiver_proc.wait()
-                returncode = self.aktiver_proc.returncode  # FIX: erst nach wait()
+                returncode = self.aktiver_proc.returncode
 
             except FileNotFoundError:
                 returncode = -1
                 self._nach(self._verlauf_schreiben,
-                           "❌ Bash konnte nicht gestartet werden.\n", "rot")
+                           "❌ Bash nicht gefunden.\n", "rot")
             except Exception as e:
                 returncode = -1
                 self._nach(self._verlauf_schreiben, f"❌ Fehler: {e}\n", "rot")
@@ -755,17 +798,19 @@ class DateiSortiererApp:
                 self.aktiver_proc = None
                 self.laeuft = False
                 if not self._zerstoert:
-                    # FIX: lambda statt dict für root.after
                     if returncode == 0:
-                        self._nach(self.status_text.configure,
-                                   text="✅  Sortierung abgeschlossen!",
-                                   fg=F["gruen"])
+                        # FIX: Lambda statt Widget-Referenz (TclError-sicher)
+                        self._nach(lambda: self._ui(
+                            self.status_text.configure,
+                            text="✅  Fertig!", fg=F["gruen"]))
                         self._nach(self._zeige_statistiken, kategorien_count)
-                        self._nach(self._vorschau_laden)
+                        # FIX: Vorschau nur neu laden wenn kein anderer Prozess startet
+                        self._nach(lambda: None if self.laeuft else self._vorschau_laden())
                     else:
-                        self._nach(self.status_text.configure,
-                                   text="❌  Fehler oder abgebrochen.",
-                                   fg=F["rot"])
+                        self._nach(lambda: self._ui(
+                            self.status_text.configure,
+                            text="❌  Fehler oder abgebrochen.",
+                            fg=F["rot"]))
                     self._nach(self._buttons_sperren, False)
 
         threading.Thread(target=_thread, daemon=True).start()
@@ -801,7 +846,6 @@ class DateiSortiererApp:
             pass
 
     def _undo(self):
-        # FIX: Prüft ob Ordner ausgewählt
         if not self.ordner_pfad.get() or not os.path.isdir(self.ordner_pfad.get()):
             messagebox.showwarning("Kein Ordner",
                                     "Bitte zuerst einen Ordner auswählen.")
@@ -812,29 +856,50 @@ class DateiSortiererApp:
             return
         if messagebox.askyesno("Rückgängig",
                                 "Letzte Sortierung wirklich rückgängig machen?"):
-            self._script_schnell([self.ordner_pfad.get(), "--undo"], "UNDO")
+            self._script_aktion([self.ordner_pfad.get(), "--undo"], "UNDO")
 
-    def _script_schnell(self, args, label="AKTION"):
-        """Führt Script-Aktion sicher im Hintergrund aus."""
+    def _zeige_log(self):
+        if not self.ordner_pfad.get() or not os.path.isdir(self.ordner_pfad.get()):
+            messagebox.showwarning("Kein Ordner",
+                                    "Bitte zuerst einen Ordner auswählen.")
+            return
+        if self.laeuft:
+            return
+        if not self._vorbedingungen_pruefen():
+            return
+        self._script_aktion([self.ordner_pfad.get(), "--log"], "LOG")
+
+    def _script_aktion(self, args, label):
+        """FIX: Sperrt Buttons genauso wie Sortierung."""
         if self.laeuft:
             return
         self.laeuft = True
-        self._nach(self._verlauf_schreiben,
-                   f"\n── {label} ──\n", "header")
+        self._buttons_sperren(True)
+        self._nach(self._verlauf_schreiben, f"\n── {label} ──\n", "header")
+
+        returncode = -1
 
         def _thread():
-            returncode = -1
+            nonlocal returncode
             try:
                 cmd = [self.bash_pfad, self.script_pfad] + args
-                proc = subprocess.Popen(
-                    cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
-                    text=True, encoding="utf-8", errors="replace"
-                )
+                # FIX: cp1252-Fallback wie in _sortieren_starten
+                try:
+                    proc = subprocess.Popen(
+                        cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+                        text=True, encoding="utf-8", errors="replace"
+                    )
+                except Exception:
+                    proc = subprocess.Popen(
+                        cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+                        text=True, encoding="cp1252", errors="replace"
+                    )
                 for zeile in proc.stdout:
                     z = zeile.strip()
                     if z:
-                        tag = "gruen" if "Wiederhergestellt" in z else \
-                              "rot"   if "Fehler" in z else None
+                        tag = ("gruen" if "Wiederhergestellt" in z or "OK:" in z
+                               else "rot" if "Fehler" in z or "ERROR" in z
+                               else None)
                         self._nach(self._verlauf_schreiben, f"  {z}\n", tag)
                 proc.wait()
                 returncode = proc.returncode
@@ -842,9 +907,11 @@ class DateiSortiererApp:
                 self._nach(self._verlauf_schreiben, f"❌ {e}\n", "rot")
             finally:
                 self.laeuft = False
-                if returncode == 0:
-                    self._nach(self._verlauf_schreiben,
-                               f"✅ {label} abgeschlossen.\n", "gruen")
+                if not self._zerstoert:
+                    if returncode == 0:
+                        self._nach(self._verlauf_schreiben,
+                                   f"✅ {label} abgeschlossen.\n", "gruen")
+                    self._nach(self._buttons_sperren, False)
 
         threading.Thread(target=_thread, daemon=True).start()
 
@@ -854,8 +921,7 @@ class DateiSortiererApp:
                 "Bash nicht gefunden",
                 "Git Bash wurde nicht gefunden!\n\n"
                 "Bitte installiere Git Bash:\n"
-                "https://git-scm.com/download/win\n\n"
-                "Nach der Installation neu starten."
+                "https://git-scm.com/download/win"
             )
             return False
         if not os.path.exists(self.script_pfad):
@@ -863,7 +929,7 @@ class DateiSortiererApp:
                 "Script nicht gefunden",
                 f"datei_sortieren.sh nicht gefunden!\n\n"
                 f"Pfad: {self.script_pfad}\n\n"
-                f"Lege datei_sortieren.sh in denselben Ordner wie gui.py."
+                f"Lege es in denselben Ordner wie gui.py."
             )
             return False
         return True
@@ -874,14 +940,12 @@ class DateiSortiererApp:
     def _beenden(self):
         if self.laeuft:
             if not messagebox.askyesno(
-                "Beenden",
-                "Ein Prozess läuft noch.\nTrotzdem beenden?"
+                "Beenden", "Ein Prozess läuft noch.\nTrotzdem beenden?"
             ):
                 return
             if self.aktiver_proc:
                 try:
                     self.aktiver_proc.terminate()
-                    # Kurz warten damit Prozess sauber beendet
                     self.aktiver_proc.wait(timeout=3)
                 except Exception:
                     try:
