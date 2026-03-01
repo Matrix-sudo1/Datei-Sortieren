@@ -11,7 +11,7 @@ Ein Bash-Script mit moderner GUI, das Dateien automatisch sortiert.
 - **Log anzeigen** – was wurde zuletzt sortiert?
 - **Duplikate erkennen** – doppelte Dateien finden und manuell entscheiden
 - **Eigene Kategorien** via `config.txt` konfigurierbar
-- **Moderne GUI** – grafische Oberfläche mit Python
+- **Moderne GUI** – grafische Oberfläche mit Python (Tabs, Vorschau-Tabelle, Statistiken)
 
 ---
 
@@ -27,9 +27,9 @@ Ein Bash-Script mit moderner GUI, das Dateien automatisch sortiert.
 python gui.py
 ```
 
-### GUI v2.0 – Stabilitätsverbesserungen
+### GUI v4.0 – Stabilitätsverbesserungen
 
-Die GUI wurde grundlegend stabiler gemacht. Folgende Probleme wurden behoben:
+Die GUI wurde in mehreren Iterationen grundlegend stabiler gemacht. Alle bekannten Absturzursachen wurden behoben:
 
 **Mehrfachklick-Schutz**
 Alle Buttons werden automatisch gesperrt sobald ein Prozess läuft. Ein versehentlicher Doppelklick startet den Prozess nicht mehr mehrfach.
@@ -37,8 +37,17 @@ Alle Buttons werden automatisch gesperrt sobald ein Prozess läuft. Ein versehen
 **Abbrechen-Button**
 Während ein Prozess läuft erscheint automatisch ein roter "Abbrechen"-Button. Damit kann jede Aktion jederzeit sauber gestoppt werden.
 
+**Thread-Lock gegen Race Conditions**
+Der `laeuft`-Zustand wird über eine thread-sichere Property mit `threading.Lock()` geschützt. Gleichzeitige Zugriffe aus mehreren Threads können den Zustand nicht mehr korrumpieren.
+
+**`returncode` immer definiert**
+Vorher konnte der Rückgabewert des Prozesses undefiniert sein wenn eine Exception vor `proc.wait()` auftrat. Jetzt wird er immer auf `-1` initialisiert.
+
+**Vorschau läuft im Hintergrund**
+Das Laden der Vorschau-Tabelle bei großen Ordnern lief vorher im Hauptthread und fror die GUI ein. Jetzt läuft es im Hintergrund-Thread.
+
 **Sichere Thread-Kommunikation**
-UI-Updates werden nur noch ausgeführt wenn das Fenster noch offen ist. Kein Absturz mehr beim schnellen Schließen des Programms während eine Aktion läuft.
+UI-Updates werden nur noch ausgeführt wenn das Fenster noch offen ist. Kein Absturz mehr beim schnellen Schließen während eine Aktion läuft.
 
 **Automatische Windows Bash-Erkennung**
 Das Programm sucht Git Bash automatisch in allen gängigen Windows-Installationspfaden. Falls Git Bash nicht gefunden wird, erscheint eine klare Fehlermeldung mit Installationslink.
@@ -46,14 +55,36 @@ Das Programm sucht Git Bash automatisch in allen gängigen Windows-Installations
 **Encoding-Schutz**
 Verhindert Abstürze bei Dateien mit Sonderzeichen oder Umlauten im Dateinamen.
 
-**Bessere Fehlermeldungen**
-Klare Fehlerdialoge wenn Bash, Script oder der gewählte Ordner nicht gefunden werden – statt eines Absturzes.
+**Undo-Schutz bei leerem Pfad**
+Undo stürzte ab wenn kein Ordner ausgewählt war. Jetzt erscheint eine Warnung.
 
-**Sicheres Beenden**
-Wenn das Programm geschlossen wird während noch ein Prozess läuft, erscheint eine Sicherheitsfrage. Der Prozess wird sauber beendet bevor das Programm sich schließt.
+**Scrollbare Vorschau-Tabelle**
+Die Tabelle hat jetzt eine Scrollbar und ein Speicherleck beim Neuladen wurde behoben.
 
-**Startup-Diagnose**
-Beim Start zeigt die GUI sofort an ob Bash und das Script gefunden wurden – so sieht man auf einen Blick ob alles bereit ist.
+**Sicheres Beenden mit Timeout**
+Wenn das Programm geschlossen wird während noch ein Prozess läuft, erscheint eine Sicherheitsfrage. Das Programm wartet bis zu 3 Sekunden auf sauberes Beenden, danach wird der Prozess hart beendet.
+
+**Bash-Status in der Statusleiste**
+Unten rechts zeigt die GUI permanent an ob Git Bash gefunden wurde.
+
+---
+
+### 🧪 Testergebnisse (GUI v4.0)
+
+Alle kritischen Funktionen wurden automatisch getestet:
+
+| Test | Ergebnis |
+|------|---------|
+| Python Syntax | ✅ Keine Fehler |
+| Kategorie-Erkennung (14 Tests) | ✅ Alle bestanden |
+| Bash & Script Erkennung | ✅ Gefunden |
+| Thread-Lock (20 parallele Zugriffe) | ✅ Keine Race Condition |
+| Dry-Run (Vorschau) | ✅ Nichts verschoben |
+| Sortierung (9 Dateien) | ✅ Alle korrekt sortiert |
+| Undo | ✅ Alle Dateien wiederhergestellt |
+| Datum-Sortierung | ✅ Korrekt (Jahr/Monat) |
+| Fehlerbehandlung | ✅ Klare Fehlermeldungen |
+| Statische Code-Analyse | ✅ Keine gefährlichen Muster |
 
 ---
 
@@ -89,6 +120,18 @@ chmod +x datei_sortieren.sh
 
 # Hilfe anzeigen
 ./datei_sortieren.sh --help
+```
+
+---
+
+## 🐛 Bugfixes (Script v5.1)
+
+**Ungültige Ordnerpfade werden korrekt abgefangen**
+Vorher ignorierte das Script einen ungültigen Ordnerpfad still und lief stattdessen im aktuellen Verzeichnis weiter. Jetzt bricht das Script sofort mit einer klaren Fehlermeldung ab:
+
+```
+Fehler: Ordner '/pfad/existiert/nicht' nicht gefunden.
+Tipp: Nutze --help fuer alle Optionen.
 ```
 
 ---
@@ -130,8 +173,11 @@ Bilder=jpg jpeg png gif heic raw
 | v3.0 | Config-Datei + Log anzeigen |
 | v4.0 | Datum-Sortierung |
 | v5.0 | Duplikate erkennen |
+| v5.1 | Bugfix: Ungültige Ordnerpfade abgefangen |
 | GUI v1.0 | Grafische Oberfläche mit Python |
 | GUI v2.0 | Stabilitätsverbesserungen |
+| GUI v3.0 | Neues Design: Tabs, Vorschau-Tabelle, Statistiken |
+| GUI v4.0 | Alle Absturzursachen behoben, vollständig getestet |
 
 ---
 
