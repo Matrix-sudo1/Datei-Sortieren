@@ -86,8 +86,15 @@ for ARG in "$@"; do
     --help)       hilfe ;;
     --config)     SKIP_NEXT=true ;;
     *)
-      if [ -d "$ARG" ]; then
-        ZIEL="$ARG"
+      # Pruefen ob Argument ein Pfad sein soll (nicht mit -- beginnend)
+      if [[ "$ARG" != --* ]]; then
+        if [ -d "$ARG" ]; then
+          ZIEL="$ARG"
+        else
+          echo -e "${ROT}Fehler: Ordner '$ARG' nicht gefunden.${RESET}"
+          echo -e "${GELB}Tipp: Nutze --help fuer alle Optionen.${RESET}"
+          exit 1
+        fi
       fi
       ;;
   esac
