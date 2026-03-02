@@ -607,7 +607,6 @@ sortiere_ordner() {
 
   shopt -s nullglob
   for DATEI in "$ORDNER"/*; do
-    shopt -u nullglob
     [ -f "$DATEI" ] || continue
     local RET
     sortiere_datei "$DATEI" "$ORDNER" "$DRYRUN" "$LOGDATEI" "$NACH_DATUM" "$DATUM_LOG"
@@ -619,7 +618,7 @@ sortiere_ordner() {
       3) FEHLER_ANZ=$((FEHLER_ANZ+1)); BERICHT_FEHLER=$((BERICHT_FEHLER+1)) ;;
     esac
   done
-  shopt -u nullglob 2>/dev/null || true
+  shopt -u nullglob
 
   echo "--------------------------------------------"
   if $DRYRUN; then
@@ -685,8 +684,9 @@ if $WATCH; then
     echo -e "${GRUEN}Echtzeit-Ueberwachung (inotifywait)${RESET}"
     echo ""
     while true; do
-      NEUE_DATEI=$(inotifywait -q -e close_write,moved_to --format '%f' "$ZIEL" 2>/dev/null)
-      [ $? -ne 0 ] && break
+      if ! NEUE_DATEI=$(inotifywait -q -e close_write,moved_to --format '%f' "$ZIEL" 2>/dev/null); then
+        break  # inotifywait Fehler → Polling-Fallback
+      fi
       DATEI="$ZIEL/$NEUE_DATEI"
       [ -f "$DATEI" ] || continue
       [ "$NEUE_DATEI" = ".sortier_log.txt" ] && continue
@@ -708,10 +708,9 @@ if $WATCH; then
   declare -A BEKANNTE_DATEIEN
   shopt -s nullglob
   for DATEI in "$ZIEL"/*; do
-    shopt -u nullglob
     [ -f "$DATEI" ] && BEKANNTE_DATEIEN["$(basename "$DATEI")"]=1
   done
-  shopt -u nullglob 2>/dev/null || true
+  shopt -u nullglob
   echo -e "${CYAN}${#BEKANNTE_DATEIEN[@]} bestehende Datei(en) ignoriert.${RESET}"
 
   WATCH_ZAEHLER=0
@@ -720,7 +719,6 @@ if $WATCH; then
     NEUE=0
     shopt -s nullglob
     for DATEI in "$ZIEL"/*; do
-      shopt -u nullglob
       [ -f "$DATEI" ] || continue
       DATEINAME=$(basename "$DATEI")
       [ "$DATEINAME" = ".sortier_log.txt" ] && continue
@@ -737,7 +735,7 @@ if $WATCH; then
         WATCH_ZAEHLER=$((WATCH_ZAEHLER+1))
       fi
     done
-    shopt -u nullglob 2>/dev/null || true
+    shopt -u nullglob
     [ $NEUE -eq 0 ] && echo -ne "${GELB}.${RESET}"
   done
 fi
