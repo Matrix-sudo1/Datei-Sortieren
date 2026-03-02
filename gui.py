@@ -132,6 +132,7 @@ class DateiSortiererApp:
         self.notify_var      = tk.BooleanVar(value=False)
         self.bericht_var     = tk.BooleanVar(value=False)
         self._theme_name     = "dark"
+        self._aktiver_tab    = "sortieren"   # Fix 5: Tab-Tracking für Theme
         self._zerstoert      = False
 
         self._lock            = threading.Lock()
@@ -204,22 +205,23 @@ class DateiSortiererApp:
     def _theme_anwenden(self):
         """Wendet das aktuelle Theme auf alle registrierten Widgets an."""
         F = self._F
+
+        # Root + registrierte Widgets
         self.root.configure(bg=F["bg"])
         for widget, rolle in self._alle_widgets:
             try:
                 bg = F.get(rolle, F["card"])
                 widget.configure(bg=bg)
-                # Textfarbe anpassen wenn möglich
-                if hasattr(widget, 'cget'):
+                # Textfarbe: nur bei reinen Label/Frame-Widgets sicher
+                if isinstance(widget, (tk.Label, tk.Frame)):
                     try:
-                        cur_fg = widget.cget("fg")
-                        if cur_fg in ("#e8eaf6", "#1a1a2e"):
-                            widget.configure(fg=F["text"])
-                    except Exception:
+                        widget.configure(fg=F["text"])
+                    except tk.TclError:
                         pass
             except Exception:
                 pass
-        # Theme-Button Label
+
+        # Theme-Button
         try:
             lbl = "☀️  Light" if self._theme_name == "dark" else "🌙  Dark"
             self.theme_btn.configure(text=lbl,
@@ -228,9 +230,42 @@ class DateiSortiererApp:
                                       activeforeground=F["text"])
         except Exception:
             pass
-        # Verlauf-Hintergrund
+
+        # Fix 3: drop_zone + drop_label
+        try:
+            hat_ordner = bool(self.ordner_pfad.get())
+            rand = F["gruen"] if hat_ordner else F["drop_border"]
+            self.drop_zone.configure(bg=F["drop"], highlightbackground=rand)
+            self.drop_label.configure(bg=F["drop"],
+                                       fg=F["text"] if hat_ordner else F["text_dim"])
+        except Exception:
+            pass
+
+        # Fix 4: verlauf_text + Tag-Farben
         try:
             self.verlauf_text.configure(bg=F["card2"], fg=F["text"])
+            self.verlauf_text.tag_config("gruen",  foreground=F["gruen"])
+            self.verlauf_text.tag_config("gelb",   foreground=F["gelb"])
+            self.verlauf_text.tag_config("rot",    foreground=F["rot"])
+            self.verlauf_text.tag_config("dim",    foreground=F["text_dim"])
+            self.verlauf_text.tag_config("header", foreground=F["akzent"])
+        except Exception:
+            pass
+
+        # Fix 5: Tab-Buttons (korrekt via _aktiver_tab)
+        try:
+            for k, btn in self.tab_buttons.items():
+                aktiv = (k == self._aktiver_tab)
+                btn.configure(bg=F["tab_aktiv"] if aktiv else F["nav"],
+                              fg=F["text"] if aktiv else F["text_dim"],
+                              activebackground=F["tab_aktiv"],
+                              activeforeground=F["text"])
+        except Exception:
+            pass
+
+        # Status-Text Farben (Buttons + Labels explizit)
+        try:
+            self.status_text.configure(bg=F["card"])
         except Exception:
             pass
 
@@ -367,6 +402,7 @@ class DateiSortiererApp:
 
     def _tab_wechseln(self, key):
         F = self._F
+        self._aktiver_tab = key
         try:
             for k, btn in self.tab_buttons.items():
                 btn.configure(
