@@ -9,8 +9,11 @@
 
 import tkinter as tk
 from tkinter import filedialog, messagebox
-import subprocess, threading, os, shutil, platform
+import subprocess, threading, os, shutil, platform, re
 from pathlib import Path
+
+# ANSI-Escape-Codes aus Script-Ausgabe entfernen
+_ANSI_RE = re.compile(r'\x1b\[[0-9;]*m')
 
 # ============================================
 #  THEMES
@@ -86,10 +89,15 @@ KATEGORIEN_PYTHON = {
 
 def get_kategorie(name):
     ext = name.rsplit(".", 1)[-1].lower() if "." in name else ""
-    for kat, exts in KATEGORIEN_PYTHON.items():
-        if ext in exts:
-            return kat, kat + "/"
-    return "Sonstiges", "Sonstiges/"
+    kat = _EXT_TO_KAT.get(ext, "Sonstiges")
+    return kat, kat + "/"
+
+# Vorgebaut für O(1)-Lookup (statt O(n×m)-Schleife bei jedem Aufruf)
+_EXT_TO_KAT = {
+    ext: kat
+    for kat, exts in KATEGORIEN_PYTHON.items()
+    for ext in exts
+}
 
 
 # ============================================
@@ -146,6 +154,7 @@ class DateiSortiererApp:
 
         self._F = dict(THEMES["dark"])   # aktives Theme
         self._alle_widgets = []           # für Theme-Neuanwendung
+        self._checkbuttons = []           # für Checkbutton-Theme-Updates
 
         self._baue_ui()
         self._drop_setup()
@@ -206,18 +215,17 @@ class DateiSortiererApp:
         """Wendet das aktuelle Theme auf alle registrierten Widgets an."""
         F = self._F
 
-        # Root + registrierte Widgets
+        # Root
         self.root.configure(bg=F["bg"])
+
+        # Registrierte Frames/Labels (bg + fg fuer Labels)
         for widget, rolle in self._alle_widgets:
             try:
                 bg = F.get(rolle, F["card"])
                 widget.configure(bg=bg)
-                # Textfarbe: nur bei reinen Label/Frame-Widgets sicher
-                if isinstance(widget, (tk.Label, tk.Frame)):
-                    try:
-                        widget.configure(fg=F["text"])
-                    except tk.TclError:
-                        pass
+                if isinstance(widget, tk.Label):
+                    try: widget.configure(fg=F["text"])
+                    except tk.TclError: pass
             except Exception:
                 pass
 
@@ -231,7 +239,7 @@ class DateiSortiererApp:
         except Exception:
             pass
 
-        # Fix 3: drop_zone + drop_label
+        # drop_zone + drop_label
         try:
             hat_ordner = bool(self.ordner_pfad.get())
             rand = F["gruen"] if hat_ordner else F["drop_border"]
@@ -241,9 +249,10 @@ class DateiSortiererApp:
         except Exception:
             pass
 
-        # Fix 4: verlauf_text + Tag-Farben
+        # verlauf_text + Tag-Farben
         try:
-            self.verlauf_text.configure(bg=F["card2"], fg=F["text"])
+            self.verlauf_text.configure(bg=F["card2"], fg=F["text"],
+                                         highlightbackground=F["border"])
             self.verlauf_text.tag_config("gruen",  foreground=F["gruen"])
             self.verlauf_text.tag_config("gelb",   foreground=F["gelb"])
             self.verlauf_text.tag_config("rot",    foreground=F["rot"])
@@ -252,7 +261,7 @@ class DateiSortiererApp:
         except Exception:
             pass
 
-        # Fix 5: Tab-Buttons (korrekt via _aktiver_tab)
+        # Tab-Buttons (korrekt via _aktiver_tab)
         try:
             for k, btn in self.tab_buttons.items():
                 aktiv = (k == self._aktiver_tab)
@@ -263,7 +272,44 @@ class DateiSortiererApp:
         except Exception:
             pass
 
-        # Status-Text Farben (Buttons + Labels explizit)
+        # Fix 5: Rahmenfarben (highlightbackground) fuer gerahmte Widgets
+        for attr in ("karte_rahmen", "tabelle_aussen_rahmen"):
+            w = getattr(self, attr, None)
+            if w:
+                try: w.configure(highlightbackground=F["border"])
+                except Exception: pass
+
+        # Fix 6: Checkbutton-Farben
+        for cb in getattr(self, "_checkbuttons", []):
+            try:
+                cb.configure(bg=F["card"], fg=F["text"],
+                              selectcolor=F["akzent"],
+                              activebackground=F["card"],
+                              activeforeground=F["text"])
+            except Exception: pass
+
+        # Fix 7: Vorschau-Tabelle Canvas + Zeilen
+        try:
+            self.tabelle_canvas.configure(bg=F["tabelle_z1"])
+            self.tabelle_frame.configure(bg=F["tabelle_z1"])
+            for idx, row in enumerate(self.tabelle_frame.winfo_children()):
+                if isinstance(row, tk.Label): continue
+                bg = F["tabelle_z1"] if idx % 2 == 0 else F["tabelle_z2"]
+                try:
+                    row.configure(bg=bg)
+                    for child in row.winfo_children():
+                        child.configure(bg=bg, fg=F["text"])
+                except Exception: pass
+        except Exception:
+            pass
+
+        # Fix 8: status_unten behaelt eigene Farbe (Gelb)
+        try:
+            self.status_unten.configure(fg=F["gelb"], bg=F["bg"])
+        except Exception:
+            pass
+
+        # status_text bg aktualisieren (fg bleibt wie zuletzt gesetzt)
         try:
             self.status_text.configure(bg=F["card"])
         except Exception:
@@ -320,6 +366,7 @@ class DateiSortiererApp:
                          highlightthickness=1)
         karte.pack(fill="both", expand=True)
         self._reg(karte, "card")
+        self.karte_rahmen = karte  # für highlightbackground im Theme-Wechsel
 
         self._baue_macos_buttons(karte)
         self._baue_app_titel(karte)
@@ -459,6 +506,7 @@ class DateiSortiererApp:
         tabelle_aussen = tk.Frame(self.frame_sortieren, bg=F["tabelle_hd"],
                                    highlightbackground=F["border"],
                                    highlightthickness=1)
+        self.tabelle_aussen_rahmen = tabelle_aussen  # Theme-Update
         tabelle_aussen.pack(fill="both", expand=True)
 
         header = tk.Frame(tabelle_aussen, bg=F["tabelle_hd"])
@@ -574,10 +622,12 @@ class DateiSortiererApp:
         F = self._F
         r = tk.Frame(parent, bg=F["card"])
         self._reg(r, "card")
-        tk.Checkbutton(r, text=text, variable=variable, font=FONT,
-                       bg=F["card"], fg=F["text"], selectcolor=F["akzent"],
-                       activebackground=F["card"], activeforeground=F["text"],
-                       cursor="hand2", relief="flat").pack(side="left")
+        cb = tk.Checkbutton(r, text=text, variable=variable, font=FONT,
+                             bg=F["card"], fg=F["text"], selectcolor=F["akzent"],
+                             activebackground=F["card"], activeforeground=F["text"],
+                             cursor="hand2", relief="flat")
+        cb.pack(side="left")
+        self._checkbuttons.append(cb)  # für Theme-Updates
         return r
 
     def _buttons_sperren(self, sperren):
@@ -696,15 +746,18 @@ class DateiSortiererApp:
         self._verlauf_schreiben("Warte auf Aktion...\n\n", "dim")
 
     _LOG_MAX_ZEILEN = 2000
+    _log_zeilen     = 0   # Cache: aktuelle Zeilenzahl
 
     def _verlauf_schreiben(self, text, tag=None):
         try:
             self.verlauf_text.configure(state="normal")
             if tag: self.verlauf_text.insert("end", text, tag)
             else:   self.verlauf_text.insert("end", text)
-            zeilen = int(self.verlauf_text.index("end-1c").split(".")[0])
-            if zeilen > self._LOG_MAX_ZEILEN:
-                self.verlauf_text.delete("1.0", f"{zeilen - self._LOG_MAX_ZEILEN}.0")
+            self._log_zeilen += text.count("\n")
+            if self._log_zeilen > self._LOG_MAX_ZEILEN:
+                zu_loeschen = self._log_zeilen - self._LOG_MAX_ZEILEN
+                self.verlauf_text.delete("1.0", f"{zu_loeschen + 1}.0")
+                self._log_zeilen = self._LOG_MAX_ZEILEN
             self.verlauf_text.see("end")
             self.verlauf_text.configure(state="disabled")
         except tk.TclError: pass
@@ -714,6 +767,7 @@ class DateiSortiererApp:
             self.verlauf_text.configure(state="normal")
             self.verlauf_text.delete("1.0", "end")
             self.verlauf_text.configure(state="disabled")
+            self._log_zeilen = 0
             self._verlauf_schreiben("── Verlauf geleert ──\n", "dim")
         except tk.TclError: pass
 
@@ -985,26 +1039,22 @@ class DateiSortiererApp:
             returncode = -1
             try:
                 cmd = [self.bash_pfad, self.script_pfad] + cmd_args
-                try:
-                    self.aktiver_proc = subprocess.Popen(
+                self.aktiver_proc = subprocess.Popen(
                         cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
                         text=True, encoding="utf-8", errors="replace")
-                except Exception:
-                    self.aktiver_proc = subprocess.Popen(
-                        cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
-                        text=True, encoding="cp1252", errors="replace")
 
                 self._nach(self._verlauf_schreiben, f"\n── Sortierung gestartet ──\n", "header")
                 self._nach(self._verlauf_schreiben, f"  Ordner: {pfad}\n", "dim")
 
                 for zeile in self.aktiver_proc.stdout:
                     if self._zerstoert: break
-                    z = zeile.strip()
+                    z = _ANSI_RE.sub("", zeile).strip()
                     if not z: continue
                     if "OK:" in z and "->" in z:
                         try:
-                            kat = z.split("->")[1].strip().rstrip("/")
-                            kat_count[kat] = kat_count.get(kat, 0) + 1
+                            kat = _ANSI_RE.sub("", z.split("->")[1]).strip().rstrip("/")
+                            if kat:
+                                kat_count[kat] = kat_count.get(kat, 0) + 1
                         except Exception: pass
                     tag = ("gruen" if any(w in z for w in ["OK:","Fertig","Wiederhergestellt"])
                            else "gelb" if any(w in z for w in ["Sonstiges","IGNORIERT","Tipp","Bericht"])
@@ -1086,16 +1136,11 @@ class DateiSortiererApp:
             nonlocal returncode
             try:
                 cmd = [self.bash_pfad, self.script_pfad] + args
-                try:
-                    proc = subprocess.Popen(
-                        cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
-                        text=True, encoding="utf-8", errors="replace")
-                except Exception:
-                    proc = subprocess.Popen(
-                        cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
-                        text=True, encoding="cp1252", errors="replace")
+                proc = subprocess.Popen(
+                    cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+                    text=True, encoding="utf-8", errors="replace")
                 for zeile in proc.stdout:
-                    z = zeile.strip()
+                    z = _ANSI_RE.sub("", zeile).strip()
                     if z:
                         tag = ("gruen" if any(w in z for w in ["Wiederhergestellt","OK:","eingerichtet","entfernt"])
                                else "rot" if any(w in z for w in ["Fehler","ERROR"])
