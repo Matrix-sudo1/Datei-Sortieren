@@ -1,0 +1,20 @@
+# Patterns to ignore in sorting
+
+# Ignore all log files
+*.log
+
+# Ignore temporary files
+*.tmp
+
+# Ignore backup files
+*.bak
+
+# Ignore cache directories
+.cache/
+
+# Ignore compiled files
+*.o
+*.class
+
+# Ignore environment files
+.env
