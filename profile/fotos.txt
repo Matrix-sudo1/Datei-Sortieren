@@ -1,0 +1,24 @@
+# Photo-Related File Extensions Configuration
+
+This file contains various photo-related file extensions.
+
+## Common Photo File Extensions
+- .jpg
+- .jpeg
+- .png
+- .gif
+- .bmp
+- .tiff
+- .heif
+- .webp
+- .raw
+
+## Camera Raw Formats
+- .cr2
+- .nef
+- .arw
+- .orf
+
+## Others
+- .svg  (for vector graphics)
+- .eps  (for encapulsated postscript)
