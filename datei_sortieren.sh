@@ -278,7 +278,8 @@ fi
 #  PROFIL
 # ============================================
 profil_laden() {
-  local NAME="$1" PFAD="$BASIS_DIR/profile/${NAME}.txt"
+  local NAME="$1"
+  local PFAD="$BASIS_DIR/profile/${NAME}.txt"
   if [ -f "$PFAD" ]; then
     CONFIGDATEI="$PFAD"; echo -e "${CYAN}Profil: $NAME${RESET}"
   else
