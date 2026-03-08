@@ -1,0 +1,19 @@
+# Developer-related File Extensions Configuration
+
+- **.java**: Java source file
+- **.py**: Python source file
+- **.js**: JavaScript source file
+- **.cpp**: C++ source file
+- **.php**: PHP source file
+- **.rb**: Ruby source file
+- **.go**: Go language file
+- **.cs**: C# source file
+- **.swift**: Swift source file
+- **.html**: HTML file
+- **.css**: CSS file
+- **.sql**: SQL file
+- **.xml**: XML file
+- **.json**: JSON file
+- **.sh**: Shell script
+- **.sql**: SQL file
+- **.md**: Markdown file
