@@ -148,6 +148,8 @@ class DateiSortiererApp:
         self.aktiver_proc     = None
         self._vorschau_laeuft = False
         self._vorschau_lock   = threading.Lock()
+        self._log_zeilen      = 0   # Instanz-Variable (nicht Klassen-Variable!)
+        self._last_kat_count  = {}  # für Theme-Wechsel: Statistiken neu rendern
 
         self.script_pfad = self._finde_script()
         self.bash_pfad   = self._finde_bash()
@@ -315,6 +317,33 @@ class DateiSortiererApp:
         except Exception:
             pass
 
+        # Bug 10: Statistiken mit neuen Theme-Farben neu rendern
+        if self._last_kat_count:
+            try: self._zeige_statistiken(self._last_kat_count)
+            except Exception: pass
+
+        # Bug 11: App-Titel Labels mit eigenen fg-Farben aktualisieren
+        for attr, fg_key in [("titel_icon_lbl", "gelb"),
+                              ("titel_name_lbl", "text"),
+                              ("titel_version_lbl", "text_dim")]:
+            w = getattr(self, attr, None)
+            if w:
+                try: w.configure(bg=F["card"], fg=F[fg_key])
+                except Exception: pass
+
+        # Bug 12: Verlauf-Tab Buttons mit Theme-Farben aktualisieren
+        for attr, bg_key, fg_key in [
+            ("undo_btn",           "akzent", "btn_text"),
+            ("log_btn",            "nav",    "text_dim"),
+            ("verlauf_leeren_btn", "nav",    "text_dim"),
+        ]:
+            w = getattr(self, attr, None)
+            if w:
+                try: w.configure(bg=F[bg_key], fg=F[fg_key],
+                                  activebackground=F["tab_aktiv"],
+                                  activeforeground=F["text"])
+                except Exception: pass
+
     def _reg(self, widget, rolle="card"):
         """Widget für Theme-Updates registrieren."""
         self._alle_widgets.append((widget, rolle))
@@ -389,7 +418,7 @@ class DateiSortiererApp:
         leiste = tk.Frame(parent, bg=F["bg"], pady=6)
         leiste.pack(fill="x")
         self._reg(leiste, "bg")
-        tk.Label(leiste, text="🖥  DATEI-SORTIERER V2.0 – GUI v5.0",
+        tk.Label(leiste, text="🖥  DATEI-SORTIERER – GUI v5.0",
                  font=("Segoe UI", 13, "bold"),
                  bg=F["bg"], fg=F["text"]).pack(side="left")
         # Theme-Button oben rechts
@@ -420,12 +449,15 @@ class DateiSortiererApp:
         r = tk.Frame(parent, bg=F["card"], pady=12)
         r.pack(fill="x", padx=24)
         self._reg(r, "card")
-        tk.Label(r, text="📁", font=("Segoe UI Emoji", 26),
-                 bg=F["card"], fg=F["gelb"]).pack(side="left")
-        tk.Label(r, text=" Datei-Sortierer",
-                 font=FONT_TITEL, bg=F["card"], fg=F["text"]).pack(side="left")
-        tk.Label(r, text="  v5.0", font=("Segoe UI", 13),
-                 bg=F["card"], fg=F["text_dim"]).pack(side="left", pady=4)
+        self.titel_icon_lbl = tk.Label(r, text="📁", font=("Segoe UI Emoji", 26),
+                 bg=F["card"], fg=F["gelb"])
+        self.titel_icon_lbl.pack(side="left")
+        self.titel_name_lbl = tk.Label(r, text=" Datei-Sortierer",
+                 font=FONT_TITEL, bg=F["card"], fg=F["text"])
+        self.titel_name_lbl.pack(side="left")
+        self.titel_version_lbl = tk.Label(r, text="  v5.0", font=("Segoe UI", 13),
+                 bg=F["card"], fg=F["text_dim"])
+        self.titel_version_lbl.pack(side="left", pady=4)
 
     def _baue_tabs(self, parent):
         F = self._F
@@ -664,6 +696,7 @@ class DateiSortiererApp:
                  font=FONT, bg=F["card"], fg=F["text_dim"], pady=30).pack()
 
     def _zeige_statistiken(self, kat_count):
+        self._last_kat_count = dict(kat_count)
         F = self._F
         try:
             for w in self.stats_frame.winfo_children(): w.destroy()
@@ -721,11 +754,13 @@ class DateiSortiererApp:
             command=self._zeige_log)
         self.log_btn.pack(side="left", padx=(0,5))
 
-        tk.Button(btn_gruppe, text="✕ Leeren", font=FONT_BOLD,
-                  bg=F["nav"], fg=F["text_dim"],
-                  activebackground=F["rot"], activeforeground=F["btn_text"],
-                  relief="flat", cursor="hand2", padx=14, pady=7,
-                  command=self._verlauf_leeren).pack(side="left")
+        self.verlauf_leeren_btn = tk.Button(
+            btn_gruppe, text="✕ Leeren", font=FONT_BOLD,
+            bg=F["nav"], fg=F["text_dim"],
+            activebackground=F["rot"], activeforeground=F["btn_text"],
+            relief="flat", cursor="hand2", padx=14, pady=7,
+            command=self._verlauf_leeren)
+        self.verlauf_leeren_btn.pack(side="left")
 
         self.verlauf_text = tk.Text(
             self.frame_verlauf, font=("Courier New", 10),
@@ -746,7 +781,6 @@ class DateiSortiererApp:
         self._verlauf_schreiben("Warte auf Aktion...\n\n", "dim")
 
     _LOG_MAX_ZEILEN = 2000
-    _log_zeilen     = 0   # Cache: aktuelle Zeilenzahl
 
     def _verlauf_schreiben(self, text, tag=None):
         try:
@@ -1026,8 +1060,10 @@ class DateiSortiererApp:
                                     f"Dateien sortieren in:\n\n{pfad}"): return
 
         cmd_args = [pfad]
-        if self.notify_var.get():  cmd_args.append("--notify")
-        if self.bericht_var.get(): cmd_args.append("--bericht")
+        if self.kopieren_var.get():    cmd_args.append("--kopieren")
+        if self.unterordner_var.get(): cmd_args.append("--unterordner")
+        if self.notify_var.get():      cmd_args.append("--notify")
+        if self.bericht_var.get():     cmd_args.append("--bericht")
 
         self.laeuft = True
         self._buttons_sperren(True)
