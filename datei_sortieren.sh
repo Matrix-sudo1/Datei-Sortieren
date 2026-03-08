@@ -65,7 +65,8 @@ unique_suffix() { echo "${SECONDS}_$$_${RANDOM}"; }
 sende_notification() {
   local TITEL="$1" TEXT="$2"
   if [ "$OS_TYP" = "macos" ]; then
-    osascript -e "display notification \"$TEXT\" with title \"$TITEL\"" 2>/dev/null || true
+    local SAFE_T="${TITEL//\"/\\\"}" SAFE_X="${TEXT//\"/\\\"}"
+    osascript -e "display notification \"$SAFE_X\" with title \"$SAFE_T\"" 2>/dev/null || true
   elif command -v notify-send &>/dev/null; then
     notify-send "$TITEL" "$TEXT" --icon=folder 2>/dev/null || true
   elif command -v zenity &>/dev/null; then
@@ -105,6 +106,8 @@ hilfe() {
   echo ""
   echo "Basis:"
   echo "  --dry-run           Vorschau (nichts wird verschoben)"
+  echo "  --kopieren          Dateien kopieren statt verschieben"
+  echo "  --unterordner       Dateien in Unterordnern einbeziehen"
   echo "  --undo              Letzte Sortierung rueckgaengig machen"
   echo "  --log               Log anzeigen"
   echo "  --nach-datum        Nach Erstelldatum sortieren (Jahr/Monat)"
@@ -143,6 +146,7 @@ hilfe() {
 ZIEL="."
 DRYRUN=false; UNDO=false; ZEIG_LOG=false; NACH_DATUM=false
 DUPLIKATE=false; WATCH=false; WATCH_INTERVAL=10; NOTIFY=false
+KOPIEREN=false; UNTERORDNER=false
 PROFIL=""; PROFIL_LIST=false
 CRONJOB_UHRZEIT=""; CRONJOB_LIST=false; CRONJOB_REMOVE=false
 BERICHT=false; BERICHT_DATEI=""
@@ -191,6 +195,8 @@ while [ $i -lt ${#ARGS[@]} ]; do
     --duplikate)      DUPLIKATE=true ;;
     --watch)          WATCH=true ;;
     --notify)         NOTIFY=true ;;
+    --kopieren)       KOPIEREN=true ;;
+    --unterordner)    UNTERORDNER=true ;;
     --watch-interval) SKIP_NEXT="interval" ;;
     --profile-list)   PROFIL_LIST=true ;;
     --profil)         SKIP_NEXT="profil" ;;
@@ -258,7 +264,7 @@ if $CRONJOB_LIST; then
     [[ "$ZEILE" != *"$CRONJOB_TAG"* ]] && continue
     MIN=$(echo "$ZEILE" | awk '{print $1}')
     STD=$(echo "$ZEILE" | awk '{print $2}')
-    ORD=$(echo "$ZEILE" | grep -oP '"[^"]+"' | tail -1 | tr -d '"')
+    ORD=$(echo "$ZEILE" | awk -F'"' '{print $(NF-1)}')
     printf "  ${GRUEN}%02d:%02d Uhr${RESET}  →  %s\n" "$STD" "$MIN" "$ORD"
     GEFUNDEN=$((GEFUNDEN+1))
   done < <(crontab -l 2>/dev/null)
@@ -368,11 +374,8 @@ _lade_standard_kategorien() {
 }
 
 # ============================================
-#  LOG  (BUGFIX: Tab-Separator statt | )
+#  LOG  (Tab-Separator: kann nicht in Dateinamen vorkommen)
 # ============================================
-# Tab kann nicht in Dateinamen vorkommen → sicherer Trennzeichen
-LOG_SEP=$'\t'
-
 log_schreiben() {
   local LOGDATEI="$1" QUELLE="$2" ZIEL_DATEI="$3" DATUM="$4"
   printf '%s\t%s\t%s\n' "$QUELLE" "$ZIEL_DATEI" "$DATUM" >> "$LOGDATEI" 2>/dev/null
@@ -466,6 +469,7 @@ sortiere_datei() {
     MONAT_NR=$(datum_aus_ts "$TS" '+%m')
     MONAT=$(monat_name "$MONAT_NR")
     JAHR="${JAHR:-$(date '+%Y')}"
+    [[ "$JAHR" == "1970" ]] && JAHR=$(date '+%Y')
     MONAT="${MONAT:-Unbekannt}"
     ZIELORDNER="$ZIEL_BASIS/$JAHR/$MONAT"
     ZIELDATEI="$ZIELORDNER/$DATEINAME"
@@ -474,9 +478,17 @@ sortiere_datei() {
       echo -e "${BLAU}VORSCHAU: $DATEINAME  ->  $JAHR/$MONAT/${RESET}"
     else
       mkdir -p "$ZIELORDNER" 2>/dev/null || { echo -e "${ROT}Fehler mkdir: $ZIELORDNER${RESET}"; return 3; }
-      if mv -- "$DATEI" "$ZIELDATEI" 2>/dev/null; then
-        log_schreiben "$LOGDATEI_PFAD" "$DATEI" "$ZIELDATEI" "$DATUM_LOG"
-        echo -e "${GRUEN}OK: $DATEINAME  ->  $JAHR/$MONAT/${RESET}"
+      local BEFEHL="mv"
+      $KOPIEREN && BEFEHL="cp --"
+      if $KOPIEREN; then
+        cp -- "$DATEI" "$ZIELDATEI" 2>/dev/null
+      else
+        mv -- "$DATEI" "$ZIELDATEI" 2>/dev/null
+      fi
+      if [ $? -eq 0 ]; then
+        ! $KOPIEREN && log_schreiben "$LOGDATEI_PFAD" "$DATEI" "$ZIELDATEI" "$DATUM_LOG"
+        local PFEIL="->"; $KOPIEREN && PFEIL="=>"
+        echo -e "${GRUEN}OK: $DATEINAME  $PFEIL  $JAHR/$MONAT/${RESET}"
         BERICHT_KATEGORIEN["$JAHR/$MONAT"]=$(( ${BERICHT_KATEGORIEN["$JAHR/$MONAT"]:-0} + 1 ))
       else
         echo -e "${ROT}Fehler: $DATEINAME${RESET}"; return 3
@@ -499,9 +511,15 @@ sortiere_datei() {
       echo -e "${BLAU}VORSCHAU: $DATEINAME  ->  $KATEGORIE/${RESET}"
     else
       mkdir -p "$ZIELORDNER" 2>/dev/null || { echo -e "${ROT}Fehler mkdir: $ZIELORDNER${RESET}"; return 3; }
-      if mv -- "$DATEI" "$ZIELDATEI" 2>/dev/null; then
-        log_schreiben "$LOGDATEI_PFAD" "$DATEI" "$ZIELDATEI" "$DATUM_LOG"
-        echo -e "${GRUEN}OK: $DATEINAME  ->  $KATEGORIE/${RESET}"
+      if $KOPIEREN; then
+        cp -- "$DATEI" "$ZIELDATEI" 2>/dev/null
+      else
+        mv -- "$DATEI" "$ZIELDATEI" 2>/dev/null
+      fi
+      if [ $? -eq 0 ]; then
+        ! $KOPIEREN && log_schreiben "$LOGDATEI_PFAD" "$DATEI" "$ZIELDATEI" "$DATUM_LOG"
+        local PFEIL="->"; $KOPIEREN && PFEIL="=>"
+        echo -e "${GRUEN}OK: $DATEINAME  $PFEIL  $KATEGORIE/${RESET}"
         BERICHT_KATEGORIEN["$KATEGORIE"]=$(( ${BERICHT_KATEGORIEN["$KATEGORIE"]:-0} + 1 ))
       else
         echo -e "${ROT}Fehler: $DATEINAME${RESET}"; return 3
@@ -517,8 +535,13 @@ sortiere_datei() {
     echo -e "${GELB}VORSCHAU: $DATEINAME  ->  Sonstiges/${RESET}"
   else
     mkdir -p "$ZIELORDNER" 2>/dev/null || return 3
-    if mv -- "$DATEI" "$ZIELDATEI" 2>/dev/null; then
-      log_schreiben "$LOGDATEI_PFAD" "$DATEI" "$ZIELDATEI" "$DATUM_LOG"
+    if $KOPIEREN; then
+      cp -- "$DATEI" "$ZIELDATEI" 2>/dev/null
+    else
+      mv -- "$DATEI" "$ZIELDATEI" 2>/dev/null
+    fi
+    if [ $? -eq 0 ]; then
+      ! $KOPIEREN && log_schreiben "$LOGDATEI_PFAD" "$DATEI" "$ZIELDATEI" "$DATUM_LOG"
       echo -e "${GELB}Sonstiges: $DATEINAME${RESET}"
       BERICHT_SONSTIGES=$((BERICHT_SONSTIGES+1))
     else
@@ -549,20 +572,36 @@ sortiere_ordner() {
   fi
   echo "--------------------------------------------"
 
-  shopt -s nullglob
-  for DATEI in "$ORDNER"/*; do
-    [ -f "$DATEI" ] || continue
-    local RET
-    sortiere_datei "$DATEI" "$ORDNER" "$DRYRUN" "$LOGDATEI" "$NACH_DATUM" "$DATUM_LOG"
-    RET=$?
-    case $RET in
-      0) VERSCHOBEN=$((VERSCHOBEN+1)); BERICHT_VERSCHOBEN=$((BERICHT_VERSCHOBEN+1)) ;;
-      1) SONSTIGES=$((SONSTIGES+1)) ;;
-      2) IGNORIERT=$((IGNORIERT+1)) ;;
-      3) FEHLER_ANZ=$((FEHLER_ANZ+1)); BERICHT_FEHLER=$((BERICHT_FEHLER+1)) ;;
-    esac
-  done
-  shopt -u nullglob
+  if $UNTERORDNER; then
+    while IFS= read -r -d '' DATEI; do
+      local DATEINAME="${DATEI##*/}"
+      [ "$DATEINAME" = ".sortier_log.txt" ] && continue
+      local RET
+      sortiere_datei "$DATEI" "$ORDNER" "$DRYRUN" "$LOGDATEI" "$NACH_DATUM" "$DATUM_LOG"
+      RET=$?
+      case $RET in
+        0) VERSCHOBEN=$((VERSCHOBEN+1)); BERICHT_VERSCHOBEN=$((BERICHT_VERSCHOBEN+1)) ;;
+        1) SONSTIGES=$((SONSTIGES+1)) ;;
+        2) IGNORIERT=$((IGNORIERT+1)); BERICHT_IGNORIERT=$((BERICHT_IGNORIERT+1)) ;;
+        3) FEHLER_ANZ=$((FEHLER_ANZ+1)); BERICHT_FEHLER=$((BERICHT_FEHLER+1)) ;;
+      esac
+    done < <(find "$ORDNER" -type f -not -name ".sortier_log.txt" -print0 2>/dev/null)
+  else
+    shopt -s nullglob
+    for DATEI in "$ORDNER"/*; do
+      [ -f "$DATEI" ] || continue
+      local RET
+      sortiere_datei "$DATEI" "$ORDNER" "$DRYRUN" "$LOGDATEI" "$NACH_DATUM" "$DATUM_LOG"
+      RET=$?
+      case $RET in
+        0) VERSCHOBEN=$((VERSCHOBEN+1)); BERICHT_VERSCHOBEN=$((BERICHT_VERSCHOBEN+1)) ;;
+        1) SONSTIGES=$((SONSTIGES+1)) ;;
+        2) IGNORIERT=$((IGNORIERT+1)); BERICHT_IGNORIERT=$((BERICHT_IGNORIERT+1)) ;;
+        3) FEHLER_ANZ=$((FEHLER_ANZ+1)); BERICHT_FEHLER=$((BERICHT_FEHLER+1)) ;;
+      esac
+    done
+    shopt -u nullglob
+  fi
 
   echo "--------------------------------------------"
   if $DRYRUN; then
