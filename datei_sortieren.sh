@@ -473,13 +473,17 @@ sortiere_datei() {
     MONAT="${MONAT:-Unbekannt}"
     ZIELORDNER="$ZIEL_BASIS/$JAHR/$MONAT"
     ZIELDATEI="$ZIELORDNER/$DATEINAME"
-    [ -e "$ZIELDATEI" ] && ZIELDATEI="$ZIELORDNER/${DATEINAME%.*}_$(unique_suffix).${DATEINAME##*.}"
+    [ -e "$ZIELDATEI" ] && {
+      if [[ "$DATEINAME" == *.* ]]; then
+        ZIELDATEI="$ZIELORDNER/${DATEINAME%.*}_$(unique_suffix).${DATEINAME##*.}"
+      else
+        ZIELDATEI="$ZIELORDNER/${DATEINAME}_$(unique_suffix)"
+      fi
+    }
     if [ "$DRYRUN_FLAG" = "true" ]; then
       echo -e "${BLAU}VORSCHAU: $DATEINAME  ->  $JAHR/$MONAT/${RESET}"
     else
       mkdir -p "$ZIELORDNER" 2>/dev/null || { echo -e "${ROT}Fehler mkdir: $ZIELORDNER${RESET}"; return 3; }
-      local BEFEHL="mv"
-      $KOPIEREN && BEFEHL="cp --"
       if $KOPIEREN; then
         cp -- "$DATEI" "$ZIELDATEI" 2>/dev/null
       else
@@ -506,7 +510,13 @@ sortiere_datei() {
   if [ -n "$KATEGORIE" ]; then
     local ZIELORDNER="$ZIEL_BASIS/$KATEGORIE"
     local ZIELDATEI="$ZIELORDNER/$DATEINAME"
-    [ -e "$ZIELDATEI" ] && ZIELDATEI="$ZIELORDNER/${DATEINAME%.*}_$(unique_suffix).$ENDUNG_KLEIN"
+    [ -e "$ZIELDATEI" ] && {
+      if [[ "$DATEINAME" == *.* ]]; then
+        ZIELDATEI="$ZIELORDNER/${DATEINAME%.*}_$(unique_suffix).$ENDUNG_KLEIN"
+      else
+        ZIELDATEI="$ZIELORDNER/${DATEINAME}_$(unique_suffix)"
+      fi
+    }
     if [ "$DRYRUN_FLAG" = "true" ]; then
       echo -e "${BLAU}VORSCHAU: $DATEINAME  ->  $KATEGORIE/${RESET}"
     else
@@ -531,6 +541,7 @@ sortiere_datei() {
   # Sonstiges
   local ZIELORDNER="$ZIEL_BASIS/Sonstiges"
   local ZIELDATEI="$ZIELORDNER/$DATEINAME"
+  [ -e "$ZIELDATEI" ] && ZIELDATEI="$ZIELORDNER/${DATEINAME%.*}_$(unique_suffix)${DATEINAME#${DATEINAME%.*}}"
   if [ "$DRYRUN_FLAG" = "true" ]; then
     echo -e "${GELB}VORSCHAU: $DATEINAME  ->  Sonstiges/${RESET}"
   else
