@@ -1,0 +1,8 @@
+# ============================================
+#  Profil: Fotos
+#  Optimiert fuer Foto-Sammlungen
+# ============================================
+Bilder=jpg jpeg png gif svg webp heic raw cr2 nef dng arw orf
+Videos=mp4 mov m4v
+Metadaten=xmp thm
+Bearbeitet=psd ai xcf
