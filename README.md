@@ -177,17 +177,19 @@ Eigener Tab „⏰ Geplant" mit:
 
 ---
 
-## 🧪 Testergebnisse (v7.0 / GUI v5.0)
+## 🧪 Testergebnisse (v7.1 / GUI v5.1)
 
 | Test | Ergebnis |
 |------|---------|
-| Script Syntax | ✅ |
-| GUI Python Syntax | ✅ |
-| Dry-Run v7.0 | ✅ |
+| Script Syntax (bash -n) | ✅ |
+| GUI Python Syntax (py_compile) | ✅ |
+| Kollision in Sonstiges/ verhindert | ✅ |
+| Suffix bei Datei ohne Erweiterung korrekt | ✅ |
+| Statistiken bei --kopieren (=>) | ✅ |
+| Theme-Wechsel: alle Labels korrekt | ✅ |
+| Theme-Wechsel: Spinboxen korrekt | ✅ |
+| Dry-Run | ✅ |
 | HTML-Bericht erstellt | ✅ |
-| Script stabil ohne DISPLAY | ✅ |
-| Papierkorb-Option vorhanden | ✅ |
-| Bestätigung bei endgültigem Löschen | ✅ |
 | Drag & Drop Setup | ✅ |
 | Dark/Light Theme | ✅ |
 | Cronjob-Tab vorhanden | ✅ |
@@ -214,6 +216,26 @@ Eigener Tab „⏰ Geplant" mit:
 
 ---
 
+## 🐛 Bugfixes v7.1 / GUI v5.1
+
+### Script v7.1
+
+| # | Typ | Beschreibung |
+|---|-----|-------------|
+| S1 | Cleanup | Toter Code entfernt: `local BEFEHL` wurde gesetzt aber nie verwendet |
+| S2 | Kritisch | **Sonstiges-Ordner**: gleichnamige Dateien wurden lautlos überschrieben – jetzt Kollisionsprüfung mit eindeutigem Suffix |
+| S3 | Bug | **Kollisions-Suffix** bei Dateien ohne Erweiterung (z.B. `Makefile`) erzeugte fehlerhaften Namen `Makefile_123.Makefile` → jetzt korrekt `Makefile_123` |
+
+### GUI v5.1
+
+| # | Typ | Beschreibung |
+|---|-----|-------------|
+| G4 | Kritisch | **Statistiken bei `--kopieren` leer**: Script gibt `=>` statt `->` aus – Parser erkennt jetzt beide Pfeile |
+| G5 | Medium | **Theme-Wechsel**: 6 unregistrierte Labels (Titelleiste, macOS-Leiste, Vorschau-Label, Tabellen-Header, Statusbar) behielten alte Hintergrundfarbe |
+| G6 | Medium | **Spinboxen** (Stunde/Minute im Cronjob-Tab) wurden beim Theme-Wechsel nicht eingefärbt |
+
+---
+
 ## 📋 Versions-Übersicht
 
 | Version | Feature |
@@ -227,12 +249,14 @@ Eigener Tab „⏰ Geplant" mit:
 | v6.0 | Watch-Modus, Ignorier-Liste, Profile, Multi-Ordner |
 | v6.1 | 8 Stabilitäts-Bugfixes |
 | **v7.0** | **Cronjob-Assistent, Benachrichtigungen, Papierkorb, HTML-Bericht** |
+| **v7.1** | **Bugfixes: Kollision in Sonstiges, Suffix bei Dateien ohne Erweiterung, toter Code entfernt** |
 | GUI v1.0 | Grafische Oberfläche |
 | GUI v2.0 | Stabilitätsverbesserungen |
 | GUI v3.0 | Tabs, Vorschau-Tabelle, Statistiken |
 | GUI v4.0 | Thread-Lock, Hintergrund-Vorschau, alle Crashes behoben |
 | GUI v4.1 | 8 weitere Stabilitäts-Bugfixes |
 | **GUI v5.0** | **Drag & Drop, Dark/Light Theme, Cronjob-Tab** |
+| **GUI v5.1** | **Bugfixes: Statistiken bei --kopieren, Theme-Wechsel für Labels & Spinboxen** |
 
 ---
 
@@ -240,8 +264,8 @@ Eigener Tab „⏰ Geplant" mit:
 
 ```
 Datei-Sortierer/
-├── datei_sortieren.sh   # Haupt-Script (v7.0)
-├── gui.py               # Grafische Oberfläche (v5.0)
+├── datei_sortieren.sh   # Haupt-Script (v7.1)
+├── gui.py               # Grafische Oberfläche (v5.1)
 ├── demo.html            # Browser-Demo
 ├── config.txt           # Kategorie-Konfiguration
 ├── ignore.txt           # Ignorier-Liste
