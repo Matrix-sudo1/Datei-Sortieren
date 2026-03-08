@@ -331,7 +331,36 @@ class DateiSortiererApp:
                 try: w.configure(bg=F["card"], fg=F[fg_key])
                 except Exception: pass
 
-        # Bug 12: Verlauf-Tab Buttons mit Theme-Farben aktualisieren
+        # Bug G5: Unregistrierte Labels (Hintergrund-Updates)
+        for attr, bg_key, fg_key in [
+            ("_titelleiste_lbl",  "bg",         "text"),
+            ("_macos_titel_lbl",  "card",       "text_dim"),
+            ("_vorschau_lbl",     "card",       "text_dim"),
+            ("_bash_status_lbl",  "bg",         None),
+        ]:
+            w = getattr(self, attr, None)
+            if w:
+                try:
+                    kw = {"bg": F[bg_key]}
+                    if fg_key: kw["fg"] = F[fg_key]
+                    w.configure(**kw)
+                except Exception: pass
+
+        # Tabellen-Header Labels
+        try:
+            for child in self._tabellen_header.winfo_children():
+                child.configure(bg=F["tabelle_hd"], fg=F["text"])
+        except Exception: pass
+
+        # Bug G6: Spinboxen im Cronjob-Tab
+        for attr in ("stunden_spin", "minuten_spin"):
+            w = getattr(self, attr, None)
+            if w:
+                try: w.configure(bg=F["nav"], fg=F["text"],
+                                  buttonbackground=F["nav"],
+                                  insertbackground=F["text"])
+                except Exception: pass
+
         for attr, bg_key, fg_key in [
             ("undo_btn",           "akzent", "btn_text"),
             ("log_btn",            "nav",    "text_dim"),
@@ -418,9 +447,10 @@ class DateiSortiererApp:
         leiste = tk.Frame(parent, bg=F["bg"], pady=6)
         leiste.pack(fill="x")
         self._reg(leiste, "bg")
-        tk.Label(leiste, text="🖥  DATEI-SORTIERER – GUI v5.0",
+        self._titelleiste_lbl = tk.Label(leiste, text="🖥  DATEI-SORTIERER – GUI v5.0",
                  font=("Segoe UI", 13, "bold"),
-                 bg=F["bg"], fg=F["text"]).pack(side="left")
+                 bg=F["bg"], fg=F["text"])
+        self._titelleiste_lbl.pack(side="left")
         # Theme-Button oben rechts
         self.theme_btn = tk.Button(
             leiste, text="☀️  Light",
@@ -441,8 +471,9 @@ class DateiSortiererApp:
             tk.Button(leiste, text="", width=2, bg=farbe,
                       activebackground=farbe, relief="flat",
                       cursor="hand2", command=cmd, bd=0).pack(side="left", padx=3)
-        tk.Label(leiste, text="📁 Datei-Sortierer v5.0",
-                 font=FONT, bg=F["card"], fg=F["text_dim"]).pack(side="left", padx=12)
+        self._macos_titel_lbl = tk.Label(leiste, text="📁 Datei-Sortierer v5.0",
+                 font=FONT, bg=F["card"], fg=F["text_dim"])
+        self._macos_titel_lbl.pack(side="left", padx=12)
 
     def _baue_app_titel(self, parent):
         F = self._F
@@ -531,9 +562,10 @@ class DateiSortiererApp:
         self._checkbox(opt, "📄  HTML-Bericht", self.bericht_var).pack(side="left")
 
         # Vorschau-Tabelle
-        tk.Label(self.frame_sortieren, text="VORSCHAU",
+        self._vorschau_lbl = tk.Label(self.frame_sortieren, text="VORSCHAU",
                  font=("Segoe UI", 9, "bold"),
-                 bg=F["card"], fg=F["text_dim"]).pack(anchor="w", pady=(0, 4))
+                 bg=F["card"], fg=F["text_dim"])
+        self._vorschau_lbl.pack(anchor="w", pady=(0, 4))
 
         tabelle_aussen = tk.Frame(self.frame_sortieren, bg=F["tabelle_hd"],
                                    highlightbackground=F["border"],
@@ -541,10 +573,10 @@ class DateiSortiererApp:
         self.tabelle_aussen_rahmen = tabelle_aussen  # Theme-Update
         tabelle_aussen.pack(fill="both", expand=True)
 
-        header = tk.Frame(tabelle_aussen, bg=F["tabelle_hd"])
-        header.pack(fill="x")
+        self._tabellen_header = tk.Frame(tabelle_aussen, bg=F["tabelle_hd"])
+        self._tabellen_header.pack(fill="x")
         for text, breite in [("Dateiname", 28), ("Kategorie", 18), ("Ziel", 20)]:
-            tk.Label(header, text=text, font=FONT_BOLD,
+            tk.Label(self._tabellen_header, text=text, font=FONT_BOLD,
                      bg=F["tabelle_hd"], fg=F["text"],
                      width=breite, anchor="w", padx=12, pady=8).pack(side="left")
 
@@ -835,22 +867,22 @@ class DateiSortiererApp:
         self.cron_stunde = tk.StringVar(value="20")
         self.cron_minute = tk.StringVar(value="00")
 
-        stunden_spin = tk.Spinbox(zeile1, from_=0, to=23,
+        self.stunden_spin = tk.Spinbox(zeile1, from_=0, to=23,
                                    textvariable=self.cron_stunde,
                                    format="%02.0f", width=4, font=FONT_BOLD,
                                    bg=F["nav"], fg=F["text"], relief="flat",
                                    buttonbackground=F["nav"],
                                    insertbackground=F["text"])
-        stunden_spin.pack(side="left", padx=(0,4))
+        self.stunden_spin.pack(side="left", padx=(0,4))
         tk.Label(zeile1, text=":", font=FONT_BOLD,
                  bg=F["card2"], fg=F["text"]).pack(side="left")
-        minuten_spin = tk.Spinbox(zeile1, from_=0, to=59,
+        self.minuten_spin = tk.Spinbox(zeile1, from_=0, to=59,
                                    textvariable=self.cron_minute,
                                    format="%02.0f", width=4, font=FONT_BOLD,
                                    bg=F["nav"], fg=F["text"], relief="flat",
                                    buttonbackground=F["nav"],
                                    insertbackground=F["text"])
-        minuten_spin.pack(side="left", padx=(4,12))
+        self.minuten_spin.pack(side="left", padx=(4,12))
         tk.Label(zeile1, text="Uhr  (täglich)", font=FONT,
                  bg=F["card2"], fg=F["text_dim"]).pack(side="left")
 
@@ -976,9 +1008,10 @@ class DateiSortiererApp:
         self.status_unten.pack(side="left")
         self._reg(self.status_unten, "bg")
         bash_ok = self.bash_pfad is not None
-        tk.Label(bar, text=f"bash: {'✅' if bash_ok else '❌'}",
+        self._bash_status_lbl = tk.Label(bar, text=f"bash: {'✅' if bash_ok else '❌'}",
                  font=FONT_KLEIN, bg=F["bg"],
-                 fg=F["gruen"] if bash_ok else F["rot"], padx=8).pack(side="right")
+                 fg=F["gruen"] if bash_ok else F["rot"], padx=8)
+        self._bash_status_lbl.pack(side="right")
         tk.Label(bar, text="GUI v5.0",
                  font=FONT_KLEIN, bg=F["bg"], fg=F["text_dim"], padx=8).pack(side="right")
 
@@ -1086,9 +1119,10 @@ class DateiSortiererApp:
                     if self._zerstoert: break
                     z = _ANSI_RE.sub("", zeile).strip()
                     if not z: continue
-                    if "OK:" in z and "->" in z:
+                    if ("OK:" in z and "->" in z) or ("OK:" in z and "=>" in z):
                         try:
-                            kat = _ANSI_RE.sub("", z.split("->")[1]).strip().rstrip("/")
+                            pfeil = "->" if "->" in z else "=>"
+                            kat = _ANSI_RE.sub("", z.split(pfeil)[1]).strip().rstrip("/")
                             if kat:
                                 kat_count[kat] = kat_count.get(kat, 0) + 1
                         except Exception: pass
