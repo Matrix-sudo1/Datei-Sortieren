@@ -64,13 +64,17 @@ unique_suffix() { echo "${SECONDS}_$$_${RANDOM}"; }
 # ============================================
 sende_notification() {
   local TITEL="$1" TEXT="$2"
+  # PATCH: Alle Shell-gefährlichen Zeichen entfernen
+  # Backticks, $(), Backslashes und Anführungszeichen werden neutralisiert
+  local SAFE_T SAFE_X
+  SAFE_T=$(printf '%s' "$TITEL" | tr -d '"`\\$')
+  SAFE_X=$(printf '%s' "$TEXT"  | tr -d '"`\\$')
   if [ "$OS_TYP" = "macos" ]; then
-    local SAFE_T="${TITEL//\"/\\\"}" SAFE_X="${TEXT//\"/\\\"}"
     osascript -e "display notification \"$SAFE_X\" with title \"$SAFE_T\"" 2>/dev/null || true
   elif command -v notify-send &>/dev/null; then
-    notify-send "$TITEL" "$TEXT" --icon=folder 2>/dev/null || true
+    notify-send "$SAFE_T" "$SAFE_X" --icon=folder 2>/dev/null || true
   elif command -v zenity &>/dev/null; then
-    zenity --notification --text="$TITEL: $TEXT" 2>/dev/null || true
+    zenity --notification --text="$SAFE_T: $SAFE_X" 2>/dev/null || true
   fi
 }
 
@@ -240,9 +244,23 @@ cronjob_einrichten() {
   local UHRZEIT="$1" ORDNER="$2"
   local STUNDE="${UHRZEIT%%:*}" MINUTE="${UHRZEIT##*:}"
   local SCRIPT_PFAD="$BASIS_DIR/datei_sortieren.sh"
+  # PATCH: Pfad auf druckbare Zeichen ohne Newline beschränken
+  if [[ "$ORDNER" =~ $'\n' ]] || [[ "$ORDNER" =~ $'\r' ]]; then
+    echo -e "${ROT}Fehler: Pfad enthält ungültige Zeichen (Zeilenumbruch).${RESET}"; exit 1
+  fi
+  if [[ "$ORDNER" =~ [^[:print:]] ]]; then
+    echo -e "${ROT}Fehler: Pfad enthält nicht-druckbare Zeichen.${RESET}"; exit 1
+  fi
   local CRON_CMD="$MINUTE $STUNDE * * * bash \"$SCRIPT_PFAD\" \"$ORDNER\" $CRONJOB_TAG"
+  # PATCH: Sicherstellen, dass der Eintrag wirklich nur eine Zeile ist
+  if [[ "$(printf '%s' "$CRON_CMD" | wc -l)" -gt 0 ]]; then
+    if printf '%s' "$CRON_CMD" | grep -q $'\n'; then
+      echo -e "${ROT}Fehler: Cron-Eintrag enthält mehrere Zeilen – Abbruch.${RESET}"; exit 1
+    fi
+  fi
+  # PATCH: Sicherer mktemp ohne unsicheren Fallback
   local TMP
-  TMP=$(mktemp 2>/dev/null) || TMP="/tmp/.sortier_cron_$$"
+  TMP=$(mktemp 2>/dev/null) || { echo -e "${ROT}Fehler: mktemp fehlgeschlagen.${RESET}"; exit 1; }
   crontab -l 2>/dev/null | grep -Fv "$CRONJOB_TAG" > "$TMP" || true
   echo "$CRON_CMD" >> "$TMP"
   crontab "$TMP"; rm -f "$TMP"
@@ -273,7 +291,7 @@ if $CRONJOB_LIST; then
 fi
 
 if $CRONJOB_REMOVE; then
-  TMP=$(mktemp 2>/dev/null) || TMP="/tmp/.sortier_cron_$$"
+  TMP=$(mktemp 2>/dev/null) || { echo -e "${ROT}Fehler: mktemp fehlgeschlagen.${RESET}"; exit 1; }
   ANZAHL=$(crontab -l 2>/dev/null | grep -Fc "$CRONJOB_TAG" || echo 0)
   crontab -l 2>/dev/null | grep -Fv "$CRONJOB_TAG" > "$TMP" || true
   crontab "$TMP"; rm -f "$TMP"
@@ -813,7 +831,7 @@ fi
 if $UNDO; then
   [ ! -f "$LOGDATEI" ] && { echo -e "${ROT}Kein Log.${RESET}"; exit 1; }
   echo -e "${GELB}Rueckgaengig...${RESET}"; echo "--------------------------------------------"
-  TMP_LOG=$(mktemp 2>/dev/null) || TMP_LOG="/tmp/.sortier_undo_$$"
+  TMP_LOG=$(mktemp 2>/dev/null) || { echo -e "${ROT}Fehler: mktemp fehlgeschlagen.${RESET}"; exit 1; }
   tac "$LOGDATEI" > "$TMP_LOG"
   WIEDERHERGESTELLT=0; FEHLER_UNDO=0
   while IFS=$'\t' read -r QUELLE ZIEL_DATEI DATUM; do
