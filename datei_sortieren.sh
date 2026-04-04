@@ -291,6 +291,7 @@ if $CRONJOB_LIST; then
 fi
 
 if $CRONJOB_REMOVE; then
+  # PATCH M4: Kein unsicherer /tmp-Fallback mehr
   TMP=$(mktemp 2>/dev/null) || { echo -e "${ROT}Fehler: mktemp fehlgeschlagen.${RESET}"; exit 1; }
   ANZAHL=$(crontab -l 2>/dev/null | grep -Fc "$CRONJOB_TAG" || echo 0)
   crontab -l 2>/dev/null | grep -Fv "$CRONJOB_TAG" > "$TMP" || true
@@ -402,6 +403,19 @@ log_schreiben() {
 # ============================================
 #  HTML-BERICHT
 # ============================================
+
+# PATCH M1: HTML-Sonderzeichen escapen – verhindert XSS durch
+# manipulierte Pfade oder Kategorienamen aus config.txt
+html_escape() {
+  local STR="$1"
+  STR="${STR//&/&amp;}"
+  STR="${STR//</&lt;}"
+  STR="${STR//>/&gt;}"
+  STR="${STR//\"/&quot;}"
+  STR="${STR//\'/&#39;}"
+  echo "$STR"
+}
+
 bericht_schreiben() {
   local ORDNER="$1"
   local DATEI="${BERICHT_DATEI:-$ORDNER/sortier_bericht_$(date +%Y%m%d_%H%M).html}"
@@ -414,10 +428,12 @@ bericht_schreiben() {
     ANZ="${BERICHT_KATEGORIEN[$K]}"
     [ "$ANZ" -gt "$MAX" ] && MAX="$ANZ"
   done
+  local ORDNER_ESC; ORDNER_ESC=$(html_escape "$ORDNER")
   for K in "${!BERICHT_KATEGORIEN[@]}"; do
     ANZ="${BERICHT_KATEGORIEN[$K]}"
     PCT=$(( ANZ * 100 / MAX ))
-    KAT_HTML+="<div class='row'><span class='name'>$K</span>"
+    local K_ESC; K_ESC=$(html_escape "$K")
+    KAT_HTML+="<div class='row'><span class='name'>$K_ESC</span>"
     KAT_HTML+="<div class='bar'><div class='fill' style='width:${PCT}%'></div></div>"
     KAT_HTML+="<span class='count'>${ANZ}x</span></div>"
   done
@@ -447,7 +463,7 @@ bericht_schreiben() {
 </style></head>
 <body>
 <h1>📁 Datei-Sortierer – Bericht</h1>
-<div class="sub">Sortiert: $ORDNER</div>
+<div class="sub">Sortiert: $ORDNER_ESC</div>
 <div class="cards">
   <div class="card"><div class="num gruen">$BERICHT_VERSCHOBEN</div><div class="lbl">Sortiert</div></div>
   <div class="card"><div class="num gelb">$BERICHT_SONSTIGES</div><div class="lbl">Sonstiges</div></div>
@@ -470,6 +486,13 @@ sortiere_datei() {
   local LOGDATEI_PFAD="$4" DATUM_FLAG="$5" DATUM_LOG="$6"
 
   [ -f "$DATEI" ] || return 2
+
+  # PATCH M3: Symlinks explizit ausschließen – verhindert, dass ein
+  # bösartiger Symlink Dateien außerhalb des Zielordners überschreibt
+  if [ -L "$DATEI" ]; then
+    echo -e "${GELB}ÜBERSPRUNGEN (Symlink): ${DATEI##*/}${RESET}"
+    return 2
+  fi
 
   # OPT: ${##*/} statt $(basename)
   local DATEINAME="${DATEI##*/}"
@@ -747,20 +770,25 @@ if $DUPLIKATE; then
   fi
 
   [ -t 0 ] && READ_TIMEOUT=30 || READ_TIMEOUT=5
+  # PATCH M2: Null-Byte als Separator – kommt nie in Dateinamen vor,
+  # verhindert Bruch durch | in Dateinamen
   declare -A HASH_MAP
 
   while IFS= read -r -d '' DATEI; do
     [ "${DATEI##*/}" = ".sortier_log.txt" ] && continue
     HASH=$(md5sum "$DATEI" 2>/dev/null | awk '{print $1}')
     [ -z "$HASH" ] && continue
-    [ -n "${HASH_MAP[$HASH]+x}" ] \
-      && HASH_MAP[$HASH]="${HASH_MAP[$HASH]}|$DATEI" \
-      || HASH_MAP[$HASH]="$DATEI"
+    if [ -n "${HASH_MAP[$HASH]+x}" ]; then
+      HASH_MAP[$HASH]="${HASH_MAP[$HASH]}"$'\x00'"$DATEI"
+    else
+      HASH_MAP[$HASH]="$DATEI"
+    fi
   done < <(find "$ZIEL" -type f -print0 2>/dev/null)
 
   DUPLIKAT_GRUPPEN=0
   for HASH in "${!HASH_MAP[@]}"; do
-    IFS='|' read -ra DATEIEN <<< "${HASH_MAP[$HASH]}"
+    # PATCH M2: Lesen mit Null-Byte statt IFS='|'
+    IFS=$'\x00' read -r -d '' -a DATEIEN <<< "${HASH_MAP[$HASH]}"$'\x00'
     [ ${#DATEIEN[@]} -le 1 ] && continue
     DUPLIKAT_GRUPPEN=$((DUPLIKAT_GRUPPEN+1))
     GROESSE=$(du -h "${DATEIEN[0]}" 2>/dev/null | awk '{print $1}')
