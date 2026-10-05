@@ -233,7 +233,7 @@ by_name={e["source"].split("/")[-1]:e for e in events}
 assert by_name["foto.jpg"]["category"]=="Bilder" and by_name["foto.jpg"]["confidence"]==1.0, p
 assert by_name["rechnung.pdf"]["category"]=="Dokumente" and by_name["rechnung.pdf"]["signal"]=="extension", p
 assert by_name["project_notes.zzz"]["category"]=="Code" and by_name["project_notes.zzz"]["signal"]=="filename", p
-assert by_name["mystery.zzz"]["category"]=="Sonstiges" and by_name["mystery.zzz"]["confidence"]==0.0, p
+assert by_name["mystery.zzz"]["category"]=="Sonstiges" and by_name["mystery.zzz"]["confidence"]==0.0 and by_name["mystery.zzz"]["signal"]=="fallback", p
 '
 before=$(find "$TMP/intelligent" -type f -print | sort | sha256sum)
 python3 "$ROOT/api.py" intelligent-preview "$TMP/intelligent" >/dev/null
@@ -241,3 +241,6 @@ after=$(find "$TMP/intelligent" -type f -print | sort | sha256sum)
 [ "$before" = "$after" ] || fail "Intelligent Preview hat Dateien veraendert"
 
 echo "PASS: v9.0 intelligent sorting tests"
+
+INVALID_PROFILE_OUTPUT=$(python3 "$ROOT/api.py" intelligent-preview "$TMP/intelligent" --profile ../config || true)
+printf "%s" "$INVALID_PROFILE_OUTPUT" | python3 -c 'import json,sys; p=json.load(sys.stdin); assert not p["success"] and p["exit_code"]==2, p'
