@@ -1,6 +1,6 @@
 # 📂 Datei-Sortierer
 
-Ein Bash-basierter Datei-Sortierer mit optionaler Tkinter-GUI. Version **v8.5** konzentriert sich auf Stabilität, sichere Pfadbehandlung, reproduzierbare Tests und eine gemeinsame Sortier-Engine für CLI und GUI.
+Ein Bash-basierter Datei-Sortierer mit optionaler Tkinter-GUI. Version **v8.6** konzentriert sich auf Stabilität, sichere Pfadbehandlung, reproduzierbare Tests und eine gemeinsame Sortier-Engine für CLI und GUI.
 
 ## Kernfunktionen
 
@@ -65,13 +65,15 @@ Die mitgelieferten Profile verwenden dasselbe Format und werden von der Bash-Eng
 
 ## JSON-API
 
-v8.5 ergänzt einen stabilen Maschinenzugang über `api.py`. Die API verwendet die Bash-Engine weiterhin als einzige Sortierlogik und liefert strukturierte JSON-Antworten mit Ereignissen.
+v8.6 ergänzt einen stabilen Maschinenzugang über `api.py`. Die API verwendet die Bash-Engine weiterhin als einzige Sortierlogik und liefert strukturierte JSON-Antworten mit Ereignissen.
 
 ```bash
 python3 api.py preview ~/Downloads
 python3 api.py sort ~/Downloads --recursive
 python3 api.py undo ~/Downloads
 python3 api.py log ~/Downloads
+python3 api.py config config.txt
+python3 api.py config-save config.txt --content 'Bilder=jpg png\nDokumente=pdf txt'
 ```
 
 Die Engine kann dafür optionale NDJSON-Ereignisse über `--json` ausgeben. Dadurch muss die GUI keine menschenlesbare CLI-Ausgabe mehr parsen.
@@ -93,7 +95,7 @@ Voraussetzungen:
 
 Die GUI berechnet die Vorschau nicht mehr mit einer eigenen Kopie der Kategorien. Sie ruft die eigentliche Sortier-Engine im `--dry-run` auf.
 
-Seit v8.5 laufen auch Sortieren, Undo und Log der GUI über `api.py`. Damit ist die GUI vollständig vom menschenlesbaren Bash-Output entkoppelt. Vorschau und reale Sortierung verwenden dieselbe Engine und dieselbe JSON-Schnittstelle.
+Seit v8.5 laufen auch Sortieren, Undo und Log der GUI über `api.py`. Seit v8.6 gibt es zusätzlich einen validierten Konfigurationseditor in der GUI; Lesen, Validieren und Speichern laufen ebenfalls über die JSON-API. Damit ist die GUI vollständig vom menschenlesbaren Bash-Output entkoppelt. Vorschau und reale Sortierung verwenden dieselbe Engine und dieselbe JSON-Schnittstelle.
 
 Damit verwenden Vorschau und reale Sortierung dieselbe:
 
@@ -137,6 +139,8 @@ Der Testumfang umfasst aktuell:
 - rekursive Sortierung
 - Schutz gegen erneute Verarbeitung erzeugter Zielordner
 - maschinenlesbare JSON-Fehlerfälle
+- Konfigurationsvalidierung und atomisches Speichern
+- GUI-Konfigurationseditor über die JSON-API
 - Watch-Engine mit Event- und Polling-Fallback
 
 Zusätzlich werden die JSON-API, Sonderzeichen im Journal und der NUL-delimitierte Log-Reader regressionsgeprüft.

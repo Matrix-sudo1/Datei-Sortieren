@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # ============================================
-#  Datei-Sortierer GUI v8.5
+#  Datei-Sortierer GUI v8.6
 #  NEU:
 #  - Drag & Drop (Ordner ins Fenster ziehen)
 #  - Dark / Light Theme Umschalter
@@ -128,7 +128,7 @@ def _parse_drop(data):
 class DateiSortiererApp:
     def __init__(self, root):
         self.root = root
-        self.root.title("Datei-Sortierer v8.5")
+        self.root.title("Datei-Sortierer v8.6")
         self.root.geometry("900x780")
         self.root.minsize(800, 660)
         self.root.resizable(True, True)
@@ -439,6 +439,7 @@ class DateiSortiererApp:
         self._baue_tab_statistiken()
         self._baue_tab_verlauf()
         self._baue_tab_cronjob()
+        self._baue_tab_config()
 
         self._tab_wechseln("sortieren")
         self._baue_statusbar(aussen)
@@ -500,7 +501,8 @@ class DateiSortiererApp:
         tabs = [("sortieren",   "🗂  Sortieren"),
                 ("statistiken", "📊  Statistiken"),
                 ("verlauf",     "🕐  Verlauf"),
-                ("cronjob",     "⏰  Geplant")]
+                ("cronjob",     "⏰  Geplant"),
+                ("config",      "⚙  Konfiguration")]
         for key, label in tabs:
             btn = tk.Button(
                 self.tab_rahmen, text=label, font=FONT_TAB,
@@ -520,12 +522,13 @@ class DateiSortiererApp:
                     bg=F["tab_aktiv"] if k == key else F["nav"],
                     fg=F["text"] if k == key else F["text_dim"])
             for frame in [self.frame_sortieren, self.frame_statistiken,
-                          self.frame_verlauf, self.frame_cronjob]:
+                          self.frame_verlauf, self.frame_cronjob, self.frame_config]:
                 frame.pack_forget()
             {"sortieren":   self.frame_sortieren,
              "statistiken": self.frame_statistiken,
              "verlauf":     self.frame_verlauf,
-             "cronjob":     self.frame_cronjob}[key].pack(fill="both", expand=True)
+             "cronjob":     self.frame_cronjob,
+             "config":      self.frame_config}[key].pack(fill="both", expand=True)
         except tk.TclError:
             pass
 
@@ -837,6 +840,92 @@ class DateiSortiererApp:
             self._log_zeilen = 0
             self._verlauf_schreiben("── Verlauf geleert ──\n", "dim")
         except tk.TclError: pass
+
+    # ------------------------------------------
+    #  TAB: KONFIGURATION
+    # ------------------------------------------
+    def _baue_tab_config(self):
+        F = self._F
+        self.frame_config = tk.Frame(self.tab_inhalt, bg=F["card"])
+        self._reg(self.frame_config, "card")
+        tk.Label(self.frame_config, text="⚙  Konfiguration", font=FONT_TITEL,
+                 bg=F["card"], fg=F["text"], pady=12).pack()
+        tk.Label(self.frame_config,
+                 text="Sortierregeln bearbeiten – Speichern wird vor dem Schreiben automatisch validiert.",
+                 font=FONT, bg=F["card"], fg=F["text_dim"]).pack(pady=(0,10))
+        self.config_text = tk.Text(self.frame_config, font=("Consolas", 10),
+                                   bg=F["nav"], fg=F["text"], insertbackground=F["text"],
+                                   relief="flat", wrap="none", height=20)
+        self.config_text.pack(fill="both", expand=True, padx=20, pady=(0,10))
+        self._reg(self.config_text, "nav")
+        buttons = tk.Frame(self.frame_config, bg=F["card"])
+        buttons.pack(fill="x", padx=20, pady=(0,10)); self._reg(buttons, "card")
+        tk.Button(buttons, text="↻  Laden", font=FONT_BTN, bg=F["akzent2"], fg=F["btn_text"],
+                  relief="flat", command=self._config_laden).pack(side="left", fill="x", expand=True, padx=(0,6))
+        tk.Button(buttons, text="✓  Validieren", font=FONT_BTN, bg=F["gelb"], fg=F["btn_text"],
+                  relief="flat", command=self._config_validieren).pack(side="left", fill="x", expand=True, padx=6)
+        tk.Button(buttons, text="💾  Speichern", font=FONT_BTN, bg=F["gruen"], fg=F["btn_text"],
+                  relief="flat", command=self._config_speichern).pack(side="left", fill="x", expand=True, padx=(6,0))
+        self.config_status = tk.Label(self.frame_config, text="", font=FONT_KLEIN,
+                                      bg=F["card"], fg=F["text_dim"])
+        self.config_status.pack(anchor="w", padx=20, pady=(0,8))
+
+    def _config_datei(self):
+        return str(Path(__file__).parent / "config.txt")
+
+    def _config_api(self, args):
+        proc = subprocess.run([sys.executable, self.api_pfad] + args,
+                              stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+                              text=True, encoding="utf-8", errors="replace", check=False)
+        return proc.returncode, json.loads(proc.stdout)
+
+    def _config_laden(self):
+        try:
+            code, payload = self._config_api(["config", self._config_datei()])
+            if code != 0 or not payload.get("success"):
+                msg = "; ".join(e.get("message","Fehler") for e in payload.get("events", []))
+                raise ValueError(msg)
+            lines = ["# Datei-Sortierer - Konfiguration", "# Format: Kategorie=endung1 endung2 ...", ""]
+            for event in payload.get("events", []):
+                if event.get("event") == "config":
+                    lines.append(f'{event.get("category")}={event.get("message","")}')
+            self.config_text.delete("1.0", "end")
+            self.config_text.insert("1.0", "\\n".join(lines) + "\\n")
+            self.config_status.configure(text=f"✓ {len(payload.get('events', []))} Kategorien geladen.", fg=self._F["gruen"])
+        except Exception as exc:
+            self.config_status.configure(text=f"❌ {exc}", fg=self._F["rot"])
+
+    def _config_validieren(self):
+        content = self.config_text.get("1.0", "end-1c")
+        try:
+            import tempfile
+            with tempfile.NamedTemporaryFile("w", encoding="utf-8", delete=False) as tmp:
+                tmp.write(content); temp = tmp.name
+            try:
+                code, payload = self._config_api(["config", temp])
+            finally:
+                os.unlink(temp)
+            if code != 0 or not payload.get("success"):
+                msg = "; ".join(e.get("message","Fehler") for e in payload.get("events", []))
+                self.config_status.configure(text=f"❌ {msg}", fg=self._F["rot"]); return False
+            self.config_status.configure(text=f"✓ Konfiguration gültig: {len(payload.get('events', []))} Kategorien.", fg=self._F["gruen"])
+            return True
+        except Exception as exc:
+            self.config_status.configure(text=f"❌ {exc}", fg=self._F["rot"]); return False
+
+    def _config_speichern(self):
+        content = self.config_text.get("1.0", "end-1c")
+        if not self._config_validieren(): return
+        if not messagebox.askyesno("Konfiguration speichern", "Die aktuelle Konfiguration speichern?"):
+            return
+        try:
+            code, payload = self._config_api(["config-save", self._config_datei(), "--content", content])
+            if code != 0 or not payload.get("success"):
+                msg = "; ".join(e.get("message","Fehler") for e in payload.get("events", []))
+                raise ValueError(msg)
+            self.config_status.configure(text="✓ Konfiguration atomar gespeichert.", fg=self._F["gruen"])
+        except Exception as exc:
+            self.config_status.configure(text=f"❌ {exc}", fg=self._F["rot"])
 
     # ------------------------------------------
     #  TAB: CRONJOB (Geplante Sortierung)
