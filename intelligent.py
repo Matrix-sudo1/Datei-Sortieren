@@ -102,14 +102,14 @@ def classify_file(path: str | Path, categories: dict[str, set[str]]) -> dict:
                 "category": matches[0],
                 "confidence": 1.0,
                 "reason": f"extension .{suffix} is explicitly mapped to {matches[0]}",
-                "source": "extension",
+                "signal": "extension",
             }
         if len(matches) > 1:
             return {
                 "category": "Sonstiges",
                 "confidence": 0.0,
                 "reason": f"extension .{suffix} is ambiguous in configuration",
-                "source": "fallback",
+                "signal": "fallback",
             }
 
     mime = mimetypes.guess_type(file_path.name, strict=False)[0]
@@ -119,7 +119,7 @@ def classify_file(path: str | Path, categories: dict[str, set[str]]) -> dict:
             "category": mime_category,
             "confidence": 0.85,
             "reason": f"MIME type {mime} suggests {mime_category}",
-            "source": "mime",
+            "signal": "mime",
         }
 
     name_category, score = _name_category(file_path.stem, categories)
@@ -129,7 +129,7 @@ def classify_file(path: str | Path, categories: dict[str, set[str]]) -> dict:
             "category": name_category,
             "confidence": round(confidence, 2),
             "reason": f"filename signals suggest {name_category}",
-            "source": "filename",
+            "signal": "filename",
         }
 
     return {
