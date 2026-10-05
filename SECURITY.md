@@ -2,11 +2,12 @@
 
 ## Supported Versions
 
-The current development line is v8.7. Security fixes are applied to the active development branch and released with the next stable version.
+The current development line is v9.0. Security fixes are applied to the active development branch and released with the next stable version.
 
 | Version | Supported |
 | --- | --- |
-| v8.x | :white_check_mark: |
+| v9.x | :white_check_mark: |
+| v8.x | :white_check_mark: for maintenance/security fixes |
 | v7.x | :white_check_mark: for security fixes only |
 | < v7 | :x: |
 
