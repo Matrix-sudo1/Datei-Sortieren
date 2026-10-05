@@ -480,7 +480,7 @@ def main() -> int:
             [{"event": "error", "status": "error", "message": str(exc)}],
         )
 
-    if ns.command in {"intelligent-rules", "intelligent-rule-add", "intelligent-rule-remove"}:
+    if ns.command in {"intelligent-rules", "intelligent-rule-add", "intelligent-rule-remove", "intelligent-rule-set"}:
         if not os.path.isdir(ns.folder):
             return json_response(False, 2, [{"event": "error", "status": "error", "message": f"folder not found: {ns.folder}"}])
         try:
