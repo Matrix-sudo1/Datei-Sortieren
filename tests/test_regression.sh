@@ -110,4 +110,26 @@ events = [e for e in payload["events"] if e["event"] == "log"]
 assert len(events) == 3, payload
 '
 
-echo "PASS: v8.2 regression tests"
+echo "[9/9] Watch-Engine Struktur und Event-Fallback"
+grep -q 'watch_inotify()' "$SCRIPT" || fail "Watch-Engine fehlt"
+grep -q 'read -r -t 1 EVENT_PATH EVENT_TYPE' "$SCRIPT" || fail "Watch-Debounce fehlt"
+grep -q 'inotifywait -q -m -r' "$SCRIPT" || fail "Rekursiver inotify-Watcher fehlt"
+grep -q 'Polling-Fallback' "$SCRIPT" || fail "Polling-Fallback fehlt"
+
+# Echtes Event-Smoketest mit einem kleinen inotifywait-Mock. Der Mock liefert
+# genau ein CREATE-Ereignis; danach muss der Watcher sauber auf Polling fallen.
+mkdir -p "$TMP/watch" "$TMP/watch-bin"
+printf 'watch' > "$TMP/watch/new.txt"
+cat > "$TMP/watch-bin/inotifywait" <<'MOCK'
+#!/usr/bin/env bash
+ROOT="${@: -1}"
+printf '%s|CLOSE_WRITE\n' "$ROOT/new.txt"
+MOCK
+chmod +x "$TMP/watch-bin/inotifywait"
+
+# Die Datei muss zunächst im Watch-Root liegen. Der Mock liefert das Event,
+# danach wird der Event-Handler nach der Debounce-Zeit ausgeführt.
+PATH="$TMP/watch-bin:$PATH" timeout 4 bash "$SCRIPT" "$TMP/watch" --watch >/dev/null 2>&1 || true
+assert_file "$TMP/watch/Dokumente/new.txt"
+
+echo "PASS: v8.3 Watch-Engine regression tests"
