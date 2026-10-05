@@ -58,4 +58,14 @@ after=$(find "$TMP/special" -type f | sort | sha256sum)
 assert_file "$TMP/special/hello world.txt"
 assert_file "$TMP/special/preview.pdf"
 
-echo "PASS: v8.0 regression tests"
+echo "[5/5] Symlink-Zielschutz"
+mkdir -p "$TMP/symlink-target"
+printf "outside" > "$TMP/outside.txt"
+ln -s "$TMP/symlink-target" "$TMP/symlink/Bilder" 2>/dev/null || true
+mkdir -p "$TMP/symlink"
+if [ ! -L "$TMP/symlink/Bilder" ]; then ln -s "$TMP/symlink-target" "$TMP/symlink/Bilder"; fi
+printf "image" > "$TMP/symlink/photo.jpg"
+bash "$SCRIPT" "$TMP/symlink" >/dev/null 2>&1 || true
+assert_file "$TMP/symlink/photo.jpg"
+
+ echo "PASS: v8.0 regression tests"
