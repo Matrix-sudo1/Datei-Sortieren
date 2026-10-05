@@ -13,5 +13,7 @@ jobs:
       - uses: actions/checkout@v4
       - name: Run regression tests
         run: bash tests/test_regression.sh
+      - name: Run release hardening tests
+        run: bash tests/test_phase10_release_hardening.sh
       - name: Verify API syntax
         run: python3 -m py_compile api.py

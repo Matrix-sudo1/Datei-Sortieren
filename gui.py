@@ -1069,6 +1069,41 @@ class DateiSortiererApp:
             font=FONT_BOLD, bg=F["card2"], fg=F["text"], anchor="w", padx=14, pady=12)
         self.automation_status_lbl.pack(fill="x", pady=(0, 10))
 
+        options = tk.Frame(self.frame_automation, bg=F["card2"],
+                           highlightbackground=F["border"], highlightthickness=1)
+        options.pack(fill="x", pady=(0, 10))
+        self._reg(options, "card2")
+
+        self.automation_interval_var = tk.StringVar(value="10")
+        self.automation_profile_var = tk.StringVar(value="")
+        self.automation_config_var = tk.StringVar(value="")
+        self.automation_ignore_var = tk.StringVar(value="")
+
+        def add_option_row(label, variable, browse=False, spin=False):
+            row = tk.Frame(options, bg=F["card2"])
+            row.pack(fill="x", padx=14, pady=6)
+            self._reg(row, "card2")
+            tk.Label(row, text=label, font=FONT_BOLD, bg=F["card2"],
+                     fg=F["text"], width=18, anchor="w").pack(side="left")
+            if spin:
+                widget = tk.Spinbox(row, from_=1, to=86400, textvariable=variable,
+                                    width=10, font=FONT, bg=F["nav"], fg=F["text"],
+                                    buttonbackground=F["card2"], relief="flat")
+            else:
+                widget = tk.Entry(row, textvariable=variable, font=FONT,
+                                  bg=F["nav"], fg=F["text"], insertbackground=F["text"],
+                                  relief="flat")
+            widget.pack(side="left", fill="x", expand=True, padx=(0, 6))
+            if browse:
+                tk.Button(row, text="…", font=FONT_BTN, bg=F["akzent2"], fg=F["btn_text"],
+                          relief="flat", command=lambda v=variable: self._automation_browse(v)
+                          ).pack(side="right")
+
+        add_option_row("Intervall (Sek.):", self.automation_interval_var, spin=True)
+        add_option_row("Profil (optional):", self.automation_profile_var)
+        add_option_row("Config-Datei:", self.automation_config_var, browse=True)
+        add_option_row("Ignore-Datei:", self.automation_ignore_var, browse=True)
+
         controls = tk.Frame(self.frame_automation, bg=F["card"])
         controls.pack(fill="x", pady=4)
         self._reg(controls, "card")
@@ -1086,18 +1121,19 @@ class DateiSortiererApp:
 
         self.automation_hint = tk.Label(
             self.frame_automation,
-            text="Start verwendet den aktuell ausgewählten Ordner und die Sortieroptionen.",
+            text="Intervall 1–86400 Sekunden. Profil, Config und Ignore werden nur bei Eintrag an die API übergeben.",
             font=FONT_KLEIN, bg=F["card"], fg=F["text_dim"], anchor="w")
         self.automation_hint.pack(fill="x", pady=(10, 0))
+
+    def _automation_browse(self, variable):
+        path = filedialog.askopenfilename(title="Datei für Automation auswählen")
+        if path:
+            variable.set(path)
 
     def _automation_status(self):
         if not self.ordner_pfad.get() or not os.path.isdir(self.ordner_pfad.get()):
             self.automation_status_lbl.configure(text="Status: bitte zuerst einen Ordner auswählen.")
             return
-        self._api_aktion(["automation-status", self.ordner_pfad.get()], "AUTOMATION STATUS",
-                         callback=self._automation_status_update)
-
-    def _automation_status_update(self):
         self._api_aktion(["automation-status", self.ordner_pfad.get()], "AUTOMATION STATUS")
 
     def _automation_action(self, action):
@@ -1105,14 +1141,26 @@ class DateiSortiererApp:
             messagebox.showwarning("Kein Ordner", "Bitte zuerst einen Ordner auswählen.")
             return
         if action == "automation-start":
-            args = [action, self.ordner_pfad.get()]
+            try:
+                interval = int(self.automation_interval_var.get())
+                if interval < 1 or interval > 86400:
+                    raise ValueError
+            except ValueError:
+                messagebox.showwarning("Ungültiges Intervall", "Das Intervall muss zwischen 1 und 86400 Sekunden liegen.")
+                return
+            args = [action, self.ordner_pfad.get(), "--interval", str(interval)]
             if self.unterordner_var.get(): args.append("--recursive")
             if self.kopieren_var.get(): args.append("--copy")
             if self.notify_var.get(): args.append("--notify")
-            self._api_aktion(args, "AUTOMATION START", callback=self._automation_status)
+            if self.automation_profile_var.get().strip():
+                args.extend(["--profile", self.automation_profile_var.get().strip()])
+            if self.automation_config_var.get().strip():
+                args.extend(["--config", self.automation_config_var.get().strip()])
+            if self.automation_ignore_var.get().strip():
+                args.extend(["--ignore", self.automation_ignore_var.get().strip()])
+            self._api_aktion(args, "AUTOMATION START")
         else:
-            self._api_aktion([action, self.ordner_pfad.get()], f"AUTOMATION {action.split('-')[-1].upper()}",
-                             callback=self._automation_status)
+            self._api_aktion([action, self.ordner_pfad.get()], f"AUTOMATION {action.split('-')[-1].upper()}")
 
     # ------------------------------------------
     #  TAB: CRONJOB (Geplante Sortierung)

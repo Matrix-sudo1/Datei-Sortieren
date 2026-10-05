@@ -290,7 +290,7 @@ printf 'unknown' > "$TMP/intelligent-selection/project_code.zzz"
 printf 'unknown' > "$TMP/intelligent-selection/mystery.zzz"
 PREVIEW_SELECTION=$(python3 "$ROOT/api.py" intelligent-preview "$TMP/intelligent-selection")
 printf '%s' "$PREVIEW_SELECTION" | python3 -c 'import json,sys; p=json.load(sys.stdin); assert p["success"], p; events=p["events"]; assert any(e.get("event")=="intelligent-plan" and e.get("plan_hash") for e in events), p'
-PLAN_HASH=$(printf '%s' "$PREVIEW_SELECTION" | python3 -c 'import json,sys; p=json.load(sys.stdin); print(next(e["plan_hash"] for e in p["events"] if e.get("event")=="intelligent-plan") )'
+PLAN_HASH=$(printf '%s' "$PREVIEW_SELECTION" | python3 -c 'import json,sys; p=json.load(sys.stdin); print(next(e["plan_hash"] for e in p["events"] if e.get("event")=="intelligent-plan"))')
 AUTO_SOURCE="$TMP/intelligent-selection/auto.jpg"
 REVIEW_SOURCE="$TMP/intelligent-selection/project_code.zzz"
 SELECTED=$(python3 "$ROOT/api.py" intelligent-sort "$TMP/intelligent-selection" --confirm --plan-hash "$PLAN_HASH" --select "$AUTO_SOURCE")
@@ -320,8 +320,8 @@ assert_file "$TMP/intelligent-selection-stale/stale.jpg"
 echo "[24/24] v9.0 Intelligent GUI Selection"
 grep -Fq 'self._intelligent_rows = []' "$ROOT/gui.py" || fail "GUI selection state fehlt"
 grep -Fq 'self._intelligent_plan_hash = None' "$ROOT/gui.py" || fail "GUI plan hash state fehlt"
-grep -Fq '--select' "$ROOT/gui.py" || fail "GUI übergibt Auswahl nicht"
-grep -Fq '--plan-hash' "$ROOT/gui.py" || fail "GUI übergibt Plan-Hash nicht"
+grep -Fq -- '--select' "$ROOT/gui.py" || fail "GUI übergibt Auswahl nicht"
+grep -Fq -- '--plan-hash' "$ROOT/gui.py" || fail "GUI übergibt Plan-Hash nicht"
 grep -Fq 'state="disabled"' "$ROOT/gui.py" || fail "GUI Leave-Auswahl ist nicht gesperrt"
 grep -Fq 'decision == "auto"' "$ROOT/gui.py" || fail "GUI Auto-Vorauswahl fehlt"
 
@@ -394,3 +394,4 @@ python3 -c 'import json,sys; p=json.load(open(sys.argv[1])); e=p["files"][0]; as
 grep -Fq 'intelligent-rule-set' "$ROOT/api.py" || fail "Rule enable/disable API fehlt"
 grep -Fq 'Lernregeln' "$ROOT/gui.py" || fail "GUI Lernregelverwaltung fehlt"
 echo "PASS: v9.0 Phase 9 rule management"
+
