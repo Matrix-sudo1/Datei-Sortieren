@@ -16,7 +16,7 @@ from pathlib import Path
 import signal
 import time
 
-from intelligent import classify_folder, load_categories
+from intelligent import classify_folder, load_categories, confidence_policy
 
 API_VERSION = "1"
 ROOT = Path(__file__).resolve().parent
@@ -325,7 +325,7 @@ def automation_profiles() -> list[dict]:
 
 
 def build_parser() -> argparse.ArgumentParser:
-    parser = JsonArgumentParser(description="JSON API for Datei-Sortierer v8.8")
+    parser = JsonArgumentParser(description="JSON API for Datei-Sortierer v9.0")
     sub = parser.add_subparsers(dest="command", required=True)
 
     intelligent = sub.add_parser("intelligent-preview", help="deterministic intelligent classification preview")
