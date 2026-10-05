@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # ============================================
-#  Datei-Sortierer GUI v8.1
+#  Datei-Sortierer GUI v8.2
 #  NEU:
 #  - Drag & Drop (Ordner ins Fenster ziehen)
 #  - Dark / Light Theme Umschalter
@@ -9,7 +9,7 @@
 
 import tkinter as tk
 from tkinter import filedialog, messagebox
-import subprocess, threading, os, shutil, platform, re
+import subprocess, threading, os, shutil, platform, re, json, sys
 from pathlib import Path
 
 # ANSI-Escape-Codes aus Script-Ausgabe entfernen
@@ -128,7 +128,7 @@ def _parse_drop(data):
 class DateiSortiererApp:
     def __init__(self, root):
         self.root = root
-        self.root.title("Datei-Sortierer v8.1")
+        self.root.title("Datei-Sortierer v8.2")
         self.root.geometry("900x780")
         self.root.minsize(800, 660)
         self.root.resizable(True, True)
@@ -152,6 +152,7 @@ class DateiSortiererApp:
         self._last_kat_count  = {}  # für Theme-Wechsel: Statistiken neu rendern
 
         self.script_pfad = self._finde_script()
+        self.api_pfad    = str(Path(__file__).parent / "api.py")
         self.bash_pfad   = self._finde_bash()
 
         self._F = dict(THEMES["dark"])   # aktives Theme
@@ -1003,7 +1004,7 @@ class DateiSortiererApp:
         bar.pack(fill="x")
         self._reg(bar, "bg")
         self.status_unten = tk.Label(
-            bar, text="GUI v8.1 – Drag & Drop  |  Dark/Light  |  Cronjob  |  Benachrichtigungen",
+            bar, text="GUI v8.2 – Engine/API  |  Drag & Drop  |  Dark/Light  |  Cronjob",
             font=FONT_KLEIN, bg=F["bg"], fg=F["gelb"])
         self.status_unten.pack(side="left")
         self._reg(self.status_unten, "bg")
@@ -1012,7 +1013,7 @@ class DateiSortiererApp:
                  font=FONT_KLEIN, bg=F["bg"],
                  fg=F["gruen"] if bash_ok else F["rot"], padx=8)
         self._bash_status_lbl.pack(side="right")
-        tk.Label(bar, text="GUI v8.1",
+        tk.Label(bar, text="GUI v8.2",
                  font=FONT_KLEIN, bg=F["bg"], fg=F["text_dim"], padx=8).pack(side="right")
 
     # ------------------------------------------
@@ -1053,34 +1054,29 @@ class DateiSortiererApp:
         def _t():
             zeilen, fehler = [], None
             try:
-                args = [pfad, "--dry-run"]
+                args = [sys.executable, self.api_pfad, "preview", pfad]
                 if self.unterordner_var.get():
-                    args.append("--unterordner")
+                    args.append("--recursive")
                 proc = subprocess.run(
-                    [self.bash_pfad, self.script_pfad] + args,
+                    args,
                     stdout=subprocess.PIPE,
                     stderr=subprocess.STDOUT,
                     text=True,
                     encoding="utf-8",
                     errors="replace",
                     check=False)
-                for raw in proc.stdout.splitlines():
-                    z = _ANSI_RE.sub("", raw).strip()
-                    if not z.startswith("OK:"):
+                payload = json.loads(proc.stdout)
+                for event in payload.get("events", []):
+                    if event.get("event") != "preview":
                         continue
-                    if "->" in z:
-                        name, ziel = z[3:].split("->", 1)
-                    elif "=>" in z:
-                        name, ziel = z[3:].split("=>", 1)
-                    else:
-                        continue
-                    name = name.strip()
-                    ziel = ziel.strip()
-                    kat = ziel.rstrip("/").split("/")[-1] or "Sonstiges"
+                    source = event.get("source", "")
+                    destination = event.get("destination", "")
+                    name = Path(source).name
+                    category = event.get("category", "Sonstiges")
                     if name:
-                        zeilen.append((name, kat, ziel))
-                if proc.returncode not in (0, 1):
-                    fehler = f"❌  Sortier-Engine meldet Fehler (Exit-Code {proc.returncode})."
+                        zeilen.append((name, category, destination))
+                if not payload.get("success", False):
+                    fehler = f"❌  Sortier-Engine meldet Fehler (Exit-Code {payload.get('exit_code', proc.returncode)})."
             except Exception as e:
                 fehler = f"❌  Vorschau fehlgeschlagen: {e}"
             finally:

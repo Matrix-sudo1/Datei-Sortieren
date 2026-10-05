@@ -1,6 +1,6 @@
 #!/bin/bash
 # ============================================
-#  Datei-Sortierer v8.1
+#  Datei-Sortierer v8.2
 #  Optimierungen gegenüber v7.0:
 #  - $(basename) → ${f##*/}  (84x schneller)
 #  - $(tr lower) → ${v,,}    (47x schneller)
@@ -18,6 +18,40 @@ fi
 # --- Farben ---
 ROT='\033[0;31m'; GRUEN='\033[0;32m'; GELB='\033[1;33m'
 BLAU='\033[0;34m'; CYAN='\033[0;36m'; MAGENTA='\033[0;35m'; RESET='\033[0m'
+
+# v8.2: optionale maschinenlesbare NDJSON-Ereignisse fuer GUI/API.
+JSON_MODE=false
+json_escape() {
+  local STR="$1"
+  STR="${STR//\\/\\\\}"
+  STR="${STR//\"/\\\"}"
+  STR="${STR//$'\n'/\\n}"
+  STR="${STR//$'\r'/\\r}"
+  STR="${STR//$'\t'/\\t}"
+  printf '%s' "$STR"
+}
+json_event() {
+  $JSON_MODE || return 0
+  local TYPE="$1" SOURCE="" DESTINATION="" CATEGORY="" STATUS="" MESSAGE=""
+  shift
+  while [ $# -gt 1 ]; do
+    case "$1" in
+      source) SOURCE="$2" ;;
+      destination) DESTINATION="$2" ;;
+      category) CATEGORY="$2" ;;
+      status) STATUS="$2" ;;
+      message) MESSAGE="$2" ;;
+    esac
+    shift 2
+  done
+  printf '{"event":"%s"' "$(json_escape "$TYPE")"
+  [ -n "$SOURCE" ] && printf ',"source":"%s"' "$(json_escape "$SOURCE")"
+  [ -n "$DESTINATION" ] && printf ',"destination":"%s"' "$(json_escape "$DESTINATION")"
+  [ -n "$CATEGORY" ] && printf ',"category":"%s"' "$(json_escape "$CATEGORY")"
+  [ -n "$STATUS" ] && printf ',"status":"%s"' "$(json_escape "$STATUS")"
+  [ -n "$MESSAGE" ] && printf ',"message":"%s"' "$(json_escape "$MESSAGE")"
+  printf '}\n'
+}
 
 # --- Betriebssystem ---
 OS_TYP="linux"
@@ -103,13 +137,14 @@ in_papierkorb() {
 hilfe() {
   echo -e "${CYAN}"
   echo "╔══════════════════════════════════════════════╗"
-  echo "║         Datei-Sortierer v8.1                 ║"
+  echo "║         Datei-Sortierer v8.2                 ║"
   echo "╚══════════════════════════════════════════════╝"
   echo -e "${RESET}"
   echo "Verwendung:  ./datei_sortieren.sh [ORDNER] [OPTIONEN]"
   echo ""
   echo "Basis:"
-  echo "  --dry-run           Vorschau (nichts wird verschoben)"
+  echo "  --dry-run           Vorschau (nichts wird verschoben)
+  --json              Maschinenlesbare NDJSON-Ereignisse (v8.2)"
   echo "  --kopieren          Dateien kopieren statt verschieben"
   echo "  --unterordner       Dateien in Unterordnern einbeziehen"
   echo "  --undo              Letzte Sortierung rueckgaengig machen"
@@ -193,6 +228,7 @@ while [ $i -lt ${#ARGS[@]} ]; do
 
   case $ARG in
     --dry-run)        DRYRUN=true ;;
+    --json)           JSON_MODE=true ;;
     --undo)           UNDO=true ;;
     --log)            ZEIG_LOG=true ;;
     --nach-datum)     NACH_DATUM=true ;;
@@ -487,7 +523,7 @@ bericht_schreiben() {
   <div class="card"><div class="num lila">$GESAMT</div><div class="lbl">Gesamt</div></div>
 </div>
 <div class="section"><h2>📊 Kategorien</h2>$KAT_HTML</div>
-<div class="meta">Start: $BERICHT_START &nbsp;|&nbsp; Ende: $ENDE &nbsp;|&nbsp; v8.1</div>
+<div class="meta">Start: $BERICHT_START &nbsp;|&nbsp; Ende: $ENDE &nbsp;|&nbsp; v8.2</div>
 </body></html>
 HTMLEOF
 
@@ -557,6 +593,7 @@ sortiere_datei() {
     }
     if [ "$DRYRUN_FLAG" = "true" ]; then
       echo -e "${BLAU}VORSCHAU: $DATEINAME  ->  $JAHR/$MONAT/${RESET}"
+      json_event "preview" source "$DATEI" destination "$ZIELDATEI" category "$JAHR/$MONAT" status "planned"
     else
       zielordner_sicher "$ZIELORDNER" || return 3
       mkdir -p "$ZIELORDNER" 2>/dev/null || { echo -e "${ROT}Fehler mkdir: $ZIELORDNER${RESET}"; return 3; }
@@ -569,6 +606,7 @@ sortiere_datei() {
         ! $KOPIEREN && log_schreiben "$LOGDATEI_PFAD" "$DATEI" "$ZIELDATEI" "$DATUM_LOG"
         local PFEIL="->"; $KOPIEREN && PFEIL="=>"
         echo -e "${GRUEN}OK: $DATEINAME  $PFEIL  $JAHR/$MONAT/${RESET}"
+        json_event "move" source "$DATEI" destination "$ZIELDATEI" category "$JAHR/$MONAT" status "ok"
         BERICHT_KATEGORIEN["$JAHR/$MONAT"]=$(( ${BERICHT_KATEGORIEN["$JAHR/$MONAT"]:-0} + 1 ))
       else
         echo -e "${ROT}Fehler: $DATEINAME${RESET}"; return 3
@@ -595,6 +633,7 @@ sortiere_datei() {
     }
     if [ "$DRYRUN_FLAG" = "true" ]; then
       echo -e "${BLAU}VORSCHAU: $DATEINAME  ->  $KATEGORIE/${RESET}"
+      json_event "preview" source "$DATEI" destination "$ZIELDATEI" category "$KATEGORIE" status "planned"
     else
       zielordner_sicher "$ZIELORDNER" || return 3
       mkdir -p "$ZIELORDNER" 2>/dev/null || { echo -e "${ROT}Fehler mkdir: $ZIELORDNER${RESET}"; return 3; }
@@ -607,6 +646,7 @@ sortiere_datei() {
         ! $KOPIEREN && log_schreiben "$LOGDATEI_PFAD" "$DATEI" "$ZIELDATEI" "$DATUM_LOG"
         local PFEIL="->"; $KOPIEREN && PFEIL="=>"
         echo -e "${GRUEN}OK: $DATEINAME  $PFEIL  $KATEGORIE/${RESET}"
+        json_event "move" source "$DATEI" destination "$ZIELDATEI" category "$KATEGORIE" status "ok"
         BERICHT_KATEGORIEN["$KATEGORIE"]=$(( ${BERICHT_KATEGORIEN["$KATEGORIE"]:-0} + 1 ))
       else
         echo -e "${ROT}Fehler: $DATEINAME${RESET}"; return 3
@@ -621,6 +661,7 @@ sortiere_datei() {
   [ -e "$ZIELDATEI" ] && ZIELDATEI="$ZIELORDNER/${DATEINAME%.*}_$(unique_suffix)${DATEINAME#${DATEINAME%.*}}"
   if [ "$DRYRUN_FLAG" = "true" ]; then
     echo -e "${GELB}VORSCHAU: $DATEINAME  ->  Sonstiges/${RESET}"
+    json_event "preview" source "$DATEI" destination "$ZIELDATEI" category "Sonstiges" status "planned"
   else
     zielordner_sicher "$ZIELORDNER" || return 3
     mkdir -p "$ZIELORDNER" 2>/dev/null || return 3
@@ -632,6 +673,7 @@ sortiere_datei() {
     if [ $? -eq 0 ]; then
       ! $KOPIEREN && log_schreiben "$LOGDATEI_PFAD" "$DATEI" "$ZIELDATEI" "$DATUM_LOG"
       echo -e "${GELB}Sonstiges: $DATEINAME${RESET}"
+      json_event "move" source "$DATEI" destination "$ZIELDATEI" category "Sonstiges" status "ok"
       BERICHT_SONSTIGES=$((BERICHT_SONSTIGES+1))
     else
       echo -e "${ROT}Fehler: $DATEINAME${RESET}"; return 3
@@ -715,6 +757,11 @@ sortiere_ordner() {
   fi
 
   # Expliziter Funktionsstatus: Sonstiges/ignorierte Dateien sind kein Fehler.
+  if $JSON_MODE; then
+    local JSON_STATUS="ok"
+    [ "$FEHLER_ANZ" -gt 0 ] && JSON_STATUS="error"
+    json_event "summary" status "$JSON_STATUS" message "moved=$VERSCHOBEN;other=$SONSTIGES;ignored=$IGNORIERT;errors=$FEHLER_ANZ"
+  fi
   [ "$FEHLER_ANZ" -gt 0 ] && return 1
   return 0
 }
@@ -893,15 +940,26 @@ if $ZEIG_LOG; then
   [ ! -f "$LOGDATEI" ] && { echo -e "${ROT}Kein Log gefunden.${RESET}"; exit 1; }
   echo -e "${CYAN}── Log der letzten Sortierung ──${RESET}"
   ANZAHL=0
-  while IFS=$'\t' read -r QUELLE ZIEL_DATEI DATUM; do
+  mapfile -d '' -t JOURNAL_FIELDS < "$LOGDATEI"
+  for ((J=0; J+2<${#JOURNAL_FIELDS[@]}; J+=3)); do
+    QUELLE="${JOURNAL_FIELDS[$J]}"
+    ZIEL_DATEI="${JOURNAL_FIELDS[$((J+1))]}"
+    DATUM="${JOURNAL_FIELDS[$((J+2))]}"
     [ -z "$QUELLE" ] && continue
-    # OPT: ${##*/} statt $(basename), $(dirname)
     QNAME="${QUELLE##*/}"
     ZKAT="${ZIEL_DATEI%/*}"; ZKAT="${ZKAT##*/}"
-    echo -e "  ${GRUEN}$QNAME${RESET}  ->  ${BLAU}${ZKAT}/${RESET}  ${GELB}($DATUM)${RESET}"
+    if $JSON_MODE; then
+      json_event "log" source "$QUELLE" destination "$ZIEL_DATEI" category "$ZKAT" status "ok"
+    else
+      echo -e "  ${GRUEN}$QNAME${RESET}  ->  ${BLAU}${ZKAT}/${RESET}  ${GELB}($DATUM)${RESET}"
+    fi
     ANZAHL=$((ANZAHL+1))
   done < "$LOGDATEI"
-  echo -e "${CYAN}Gesamt: $ANZAHL  |  --undo zum Rueckgaengig machen${RESET}"
+  if $JSON_MODE; then
+    json_event "summary" status "ok" message "log entries: $ANZAHL"
+  else
+    echo -e "${CYAN}Gesamt: $ANZAHL  |  --undo zum Rueckgaengig machen${RESET}"
+  fi
   exit 0
 fi
 
@@ -927,17 +985,21 @@ if $UNDO; then
     [ -z "$QUELLE" ] && continue
     if [ ! -e "$ZIEL_DATEI" ]; then
       echo -e "${ROT}Nicht vorhanden: ${ZIEL_DATEI##*/}${RESET}"
+      json_event "undo" source "$QUELLE" destination "$ZIEL_DATEI" status "error" message "destination missing"
       FEHLER_UNDO=$((FEHLER_UNDO+1)); continue
     fi
     if [ -e "$QUELLE" ]; then
       echo -e "${ROT}Ziel bereits vorhanden, nichts ueberschrieben: ${QUELLE##*/}${RESET}"
+      json_event "undo" source "$QUELLE" destination "$ZIEL_DATEI" status "conflict" message "source already exists"
       FEHLER_UNDO=$((FEHLER_UNDO+1)); continue
     fi
     if mv -- "$ZIEL_DATEI" "$QUELLE" 2>/dev/null; then
       echo -e "${GRUEN}Wiederhergestellt: ${QUELLE##*/}${RESET}"
+      json_event "undo" source "$QUELLE" destination "$ZIEL_DATEI" status "ok"
       WIEDERHERGESTELLT=$((WIEDERHERGESTELLT+1))
     else
       echo -e "${ROT}Fehler: ${QUELLE##*/}${RESET}"
+      json_event "undo" source "$QUELLE" destination "$ZIEL_DATEI" status "error" message "move failed"
       FEHLER_UNDO=$((FEHLER_UNDO+1))
     fi
   done
