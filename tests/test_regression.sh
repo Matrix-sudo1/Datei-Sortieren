@@ -342,3 +342,33 @@ printf "%s" "$REPORT_CONFIRM" | python3 -c 'import json,sys; p=json.load(sys.std
 assert_file "$TMP/intelligent-report/Bilder/report.jpg"
 python3 -c 'import json,sys; p=json.load(open(sys.argv[1])); assert p["mode"]=="intelligent-sort"; assert p["summary"]["selected"]==1; assert p["summary"]["engine_exit_code"]==0; assert p["plan_hash"]' "$TMP/intelligent-report/.datei-sortierer/intelligent-report.json"
 echo "PASS: v9.0 intelligent sort report"
+
+echo "[26/26] v9.0 Learning Rules – deterministic correction"
+mkdir -p "$TMP/learning-rules"
+printf "unknown" > "$TMP/learning-rules/notes.zzz"
+RULE_ADD=$(python3 "$ROOT/api.py" intelligent-rule-add "$TMP/learning-rules" --source extension --pattern zzz --category Code --id ext-zzz-code)
+printf "%s" "$RULE_ADD" | python3 -c 'import json,sys; p=json.load(sys.stdin); assert p["success"], p; assert p["events"][0]["status"]=="created", p'
+assert_file "$TMP/learning-rules/.datei-sortierer/learning-rules.json"
+RULE_PREVIEW=$(python3 "$ROOT/api.py" intelligent-preview "$TMP/learning-rules")
+printf "%s" "$RULE_PREVIEW" | python3 -c 'import json,sys; p=json.load(sys.stdin); e=next(e for e in p["events"] if e.get("event")=="intelligent"); assert e["category"]=="Code" and e["confidence"]==1.0 and e["signal"]=="learning_rule" and e["rule_id"]=="ext-zzz-code", p'
+RULE_LIST=$(python3 "$ROOT/api.py" intelligent-rules "$TMP/learning-rules")
+printf "%s" "$RULE_LIST" | python3 -c 'import json,sys; p=json.load(sys.stdin); assert p["success"] and p["events"][0]["id"]=="ext-zzz-code", p'
+RULE_REMOVE=$(python3 "$ROOT/api.py" intelligent-rule-remove "$TMP/learning-rules" --id ext-zzz-code)
+printf "%s" "$RULE_REMOVE" | python3 -c 'import json,sys; p=json.load(sys.stdin); assert p["success"] and p["events"][0]["status"]=="removed", p'
+RULE_FALLBACK=$(python3 "$ROOT/api.py" intelligent-preview "$TMP/learning-rules")
+printf "%s" "$RULE_FALLBACK" | python3 -c 'import json,sys; p=json.load(sys.stdin); e=next(e for e in p["events"] if e.get("event")=="intelligent"); assert e["category"]=="Sonstiges" and e["signal"]=="fallback", p'
+
+mkdir -p "$TMP/learning-rules-mime"
+printf "unknown" > "$TMP/learning-rules-mime/manual.zzz"
+RULE_MIME=$(python3 "$ROOT/api.py" intelligent-rule-add "$TMP/learning-rules-mime" --source mime --pattern text/plain --category Dokumente --id mime-text-code)
+printf "%s" "$RULE_MIME" | python3 -c 'import json,sys; p=json.load(sys.stdin); assert p["success"], p'
+MIME_PREVIEW=$(python3 "$ROOT/api.py" intelligent-preview "$TMP/learning-rules-mime")
+printf "%s" "$MIME_PREVIEW" | python3 -c 'import json,sys; p=json.load(sys.stdin); e=next(e for e in p["events"] if e.get("event")=="intelligent"); assert e["category"]=="Dokumente" and e["rule_id"]=="mime-text-code", p'
+
+mkdir -p "$TMP/learning-rules-invalid"
+INVALID_RULE=$(python3 "$ROOT/api.py" intelligent-rule-add "$TMP/learning-rules-invalid" --source extension --pattern '../x' --category Code || true)
+printf "%s" "$INVALID_RULE" | python3 -c 'import json,sys; p=json.load(sys.stdin); assert not p["success"] and p["exit_code"]==2, p'
+grep -Fq 'Als Regel übernehmen' "$ROOT/gui.py" || fail "GUI Lernregel-Aktion fehlt"
+grep -Fq 'learning-rule' "$ROOT/api.py" || fail "Learning-Rule API fehlt"
+grep -Fq 'load_learning_rules' "$ROOT/intelligent.py" || fail "Learning Rules werden nicht angewendet"
+echo "PASS: v9.0 Phase 8 learning rules"
