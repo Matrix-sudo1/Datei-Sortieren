@@ -361,7 +361,11 @@ laden_kategorien() {
     while IFS='=' read -r KAT ENDUNGEN; do
       [[ "$KAT" =~ ^# || -z "${KAT// }" ]] && continue
       KAT="${KAT// /}"
-      if [ -z "$KAT" ] || [[ "$KAT" == *"/"* || "$KAT" == *"\"* || "$KAT" == "." || "$KAT" == ".." || "$KAT" == *
+      if [ -z "$KAT" ] || [[ "$KAT" == *"/"* || "$KAT" == *"\\"* || "$KAT" == "." || "$KAT" == ".." || "$KAT" =~ [^[:print:]] ]]; then
+        echo -e "${ROT}Fehler: Ungueltiger Kategoriename in ${CONFIGDATEI##*/}: '$KAT'${RESET}" >&2
+        continue
+      fi
+      [ -n "$KAT" ] && KATEGORIEN["$KAT"]="$ENDUNGEN"
     done < "$CONFIGDATEI"
     [ ${#KATEGORIEN[@]} -eq 0 ] && _lade_standard_kategorien
   else
