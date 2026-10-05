@@ -128,7 +128,7 @@ def _parse_drop(data):
 class DateiSortiererApp:
     def __init__(self, root):
         self.root = root
-        self.root.title("Datei-Sortierer v8.0")
+        self.root.title("Datei-Sortierer v8.1")
         self.root.geometry("900x780")
         self.root.minsize(800, 660)
         self.root.resizable(True, True)
@@ -471,7 +471,7 @@ class DateiSortiererApp:
             tk.Button(leiste, text="", width=2, bg=farbe,
                       activebackground=farbe, relief="flat",
                       cursor="hand2", command=cmd, bd=0).pack(side="left", padx=3)
-        self._macos_titel_lbl = tk.Label(leiste, text="📁 Datei-Sortierer v8.0",
+        self._macos_titel_lbl = tk.Label(leiste, text="📁 Datei-Sortierer v8.1",
                  font=FONT, bg=F["card"], fg=F["text_dim"])
         self._macos_titel_lbl.pack(side="left", padx=12)
 
@@ -486,7 +486,7 @@ class DateiSortiererApp:
         self.titel_name_lbl = tk.Label(r, text=" Datei-Sortierer",
                  font=FONT_TITEL, bg=F["card"], fg=F["text"])
         self.titel_name_lbl.pack(side="left")
-        self.titel_version_lbl = tk.Label(r, text="  v8.0", font=("Segoe UI", 13),
+        self.titel_version_lbl = tk.Label(r, text="  v8.1", font=("Segoe UI", 13),
                  bg=F["card"], fg=F["text_dim"])
         self.titel_version_lbl.pack(side="left", pady=4)
 
