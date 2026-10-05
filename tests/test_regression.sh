@@ -359,7 +359,7 @@ RULE_FALLBACK=$(python3 "$ROOT/api.py" intelligent-preview "$TMP/learning-rules"
 printf "%s" "$RULE_FALLBACK" | python3 -c 'import json,sys; p=json.load(sys.stdin); e=next(e for e in p["events"] if e.get("event")=="intelligent"); assert e["category"]=="Sonstiges" and e["signal"]=="fallback", p'
 
 mkdir -p "$TMP/learning-rules-mime"
-printf "unknown" > "$TMP/learning-rules-mime/manual.zzz"
+printf "unknown" > "$TMP/learning-rules-mime/manual.txt"
 RULE_MIME=$(python3 "$ROOT/api.py" intelligent-rule-add "$TMP/learning-rules-mime" --source mime --pattern text/plain --category Dokumente --id mime-text-code)
 printf "%s" "$RULE_MIME" | python3 -c 'import json,sys; p=json.load(sys.stdin); assert p["success"], p'
 MIME_PREVIEW=$(python3 "$ROOT/api.py" intelligent-preview "$TMP/learning-rules-mime")
