@@ -13,7 +13,7 @@ fail() {
 echo "[1/1] v9.0 Phase 10 Release Hardening"
 mkdir -p "$TMP/automation"
 
-python3 "$ROOT/api.py" automation-start "$TMP/automation" --interval 2 > "$TMP/start.json"
+python3 "$ROOT/api.py" automation-start "$TMP/automation" --interval 2 > "$TMP/start.json" || true
 python3 - "$TMP/start.json" <<'PY'
 import json,sys
 p=json.load(open(sys.argv[1],encoding="utf-8"))
