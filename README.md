@@ -265,3 +265,20 @@ Vor der Ausführung erzeugt die API einen deterministischen Plan-Hash. Beim Sort
 ## v9.0 Phase 7 – Intelligent Sort Reports
 
 Intelligent Sort schreibt zusätzlich einen strukturierten Bericht unter `.datei-sortierer/intelligent-report.json`. Der Bericht enthält Plan-Hash, Zeitstempel, Klassifizierungen, Auswahl und Engine-Ergebnis. Der Bericht wird atomar geschrieben und mit restriktiven Dateirechten angelegt. Auch ein reiner Confirmation-Preview erzeugt einen Bericht, ohne Dateien zu verändern.
+
+
+## v9.0 Phase 8 – Deterministische Lernregeln
+
+Phase 8 ergänzt ein explizites Feedback-System für intelligente Klassifizierung. Eine vom Benutzer bestätigte Korrektur kann als lokale Regel gespeichert werden. Lernregeln sind getrennt von der normalen `config.txt` und werden vor Extension-, MIME- und Dateinamen-Signalen ausgewertet.
+
+Unter `.datei-sortierer/learning-rules.json` werden Regeln mit restriktiven Dateirechten und atomarem Replace gespeichert. Jede Regel enthält eine ID, Quelle (`extension`, `mime` oder `filename_token`), Muster, Zielkategorie, Aktivierungsstatus und Erstellungszeitpunkt. Python verschiebt weiterhin keine Dateien; die Bash-Engine bleibt alleinige Autorität für reale Sortiervorgänge.
+
+Beispiele:
+
+```bash
+python3 api.py intelligent-rule-add ~/Downloads --source extension --pattern xyz --category Code --id ext-xyz-code
+python3 api.py intelligent-rules ~/Downloads
+python3 api.py intelligent-rule-remove ~/Downloads --id ext-xyz-code
+```
+
+In der GUI kann ein intelligenter Vorschlag über **Als Regel übernehmen** als dauerhafte Korrektur gespeichert werden. Die nächste Intelligent-Vorschau verwendet die Regel deterministisch und weist das verwendete `rule_id` aus.
