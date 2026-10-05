@@ -1,14 +1,7 @@
-# Office-Related File Extensions Configuration
-
-Here is a list of common office-related file extensions:
-
-- .doc  : Word Document
-- .docx : Word Document (XML)
-- .xls  : Excel Spreadsheet
-- .xlsx : Excel Spreadsheet (XML)
-- .ppt  : PowerPoint Presentation
-- .pptx : PowerPoint Presentation (XML)
-- .pdf  : Portable Document Format
-- .txt  : Plain Text File
-- .rtf  : Rich Text Format
-- .csv  : Comma-Separated Values
+# ============================================
+#  Profil: Buero
+#  Optimiert fuer Office-Dateien
+# ============================================
+Dokumente=doc docx pdf txt rtf odt md
+Tabellen=xls xlsx csv ods
+Praesentation=ppt pptx odp

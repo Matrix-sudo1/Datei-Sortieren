@@ -1,6 +1,6 @@
 #!/bin/bash
 # ============================================
-#  Datei-Sortierer v7.1
+#  Datei-Sortierer v8.0
 #  Optimierungen gegenüber v7.0:
 #  - $(basename) → ${f##*/}  (84x schneller)
 #  - $(tr lower) → ${v,,}    (47x schneller)
@@ -103,7 +103,7 @@ in_papierkorb() {
 hilfe() {
   echo -e "${CYAN}"
   echo "╔══════════════════════════════════════════════╗"
-  echo "║         Datei-Sortierer v7.1                 ║"
+  echo "║         Datei-Sortierer v8.0                 ║"
   echo "╚══════════════════════════════════════════════╝"
   echo -e "${RESET}"
   echo "Verwendung:  ./datei_sortieren.sh [ORDNER] [OPTIONEN]"
@@ -251,7 +251,16 @@ cronjob_einrichten() {
   if [[ "$ORDNER" =~ [^[:print:]] ]]; then
     echo -e "${ROT}Fehler: Pfad enthält nicht-druckbare Zeichen.${RESET}"; exit 1
   fi
-  local CRON_CMD="$MINUTE $STUNDE * * * bash \"$SCRIPT_PFAD\" \"$ORDNER\" $CRONJOB_TAG"
+  # Shell-sichere Einzelquotierung: Pfade koennen Sonderzeichen enthalten, ohne Cron-Shell-Syntax zu aktivieren.
+  cron_quote() {
+    local VALUE="$1"
+    VALUE="${VALUE//\'/\'\\\'\'}"
+    printf "'%s'" "$VALUE"
+  }
+  local SCRIPT_QUOTED ORDNER_QUOTED
+  SCRIPT_QUOTED=$(cron_quote "$SCRIPT_PFAD")
+  ORDNER_QUOTED=$(cron_quote "$ORDNER")
+  local CRON_CMD="$MINUTE $STUNDE * * * bash $SCRIPT_QUOTED $ORDNER_QUOTED $CRONJOB_TAG"
   # PATCH: Sicherstellen, dass der Eintrag wirklich nur eine Zeile ist
   if [[ "$(printf '%s' "$CRON_CMD" | wc -l)" -gt 0 ]]; then
     if printf '%s' "$CRON_CMD" | grep -q $'\n'; then
@@ -361,6 +370,10 @@ laden_kategorien() {
     while IFS='=' read -r KAT ENDUNGEN; do
       [[ "$KAT" =~ ^# || -z "${KAT// }" ]] && continue
       KAT="${KAT// /}"
+      if [ -z "$KAT" ] || [[ "$KAT" == *"/"* || "$KAT" == *"\\"* || "$KAT" == "." || "$KAT" == ".." || "$KAT" =~ [^[:print:]] ]]; then
+        echo -e "${ROT}Fehler: Ungueltiger Kategoriename in ${CONFIGDATEI##*/}: '$KAT'${RESET}" >&2
+        continue
+      fi
       [ -n "$KAT" ] && KATEGORIEN["$KAT"]="$ENDUNGEN"
     done < "$CONFIGDATEI"
     [ ${#KATEGORIEN[@]} -eq 0 ] && _lade_standard_kategorien
@@ -393,11 +406,15 @@ _lade_standard_kategorien() {
 }
 
 # ============================================
-#  LOG  (Tab-Separator: kann nicht in Dateinamen vorkommen)
+#  LOG / JOURNAL
 # ============================================
+# Das Journal ist null-delimitiert: Unix-Dateinamen duerfen Tabs und
+# Zeilenumbrueche enthalten; NUL ist das einzige unzulaessige Zeichen.
 log_schreiben() {
   local LOGDATEI="$1" QUELLE="$2" ZIEL_DATEI="$3" DATUM="$4"
-  printf '%s\t%s\t%s\n' "$QUELLE" "$ZIEL_DATEI" "$DATUM" >> "$LOGDATEI" 2>/dev/null
+  {
+    printf '%s\0%s\0%s\0' "$QUELLE" "$ZIEL_DATEI" "$DATUM"
+  } >> "$LOGDATEI" 2>/dev/null
 }
 
 # ============================================
@@ -412,7 +429,6 @@ html_escape() {
   STR="${STR//</&lt;}"
   STR="${STR//>/&gt;}"
   STR="${STR//\"/&quot;}"
-  STR="${STR//\'/&#39;}"
   echo "$STR"
 }
 
@@ -471,11 +487,29 @@ bericht_schreiben() {
   <div class="card"><div class="num lila">$GESAMT</div><div class="lbl">Gesamt</div></div>
 </div>
 <div class="section"><h2>📊 Kategorien</h2>$KAT_HTML</div>
-<div class="meta">Start: $BERICHT_START &nbsp;|&nbsp; Ende: $ENDE &nbsp;|&nbsp; v7.1</div>
+<div class="meta">Start: $BERICHT_START &nbsp;|&nbsp; Ende: $ENDE &nbsp;|&nbsp; v8.0</div>
 </body></html>
 HTMLEOF
 
   echo -e "${GRUEN}Bericht: $DATEI${RESET}"
+}
+
+# ============================================
+#  SICHERE ZIELORDNER
+# ============================================
+# Verhindert, dass ein bereits vorhandener Symlink als automatisch
+# erzeugter Zielordner verwendet wird.
+zielordner_sicher() {
+  local ORDNER="$1"
+  local KOMPONENTE
+  for KOMPONENTE in "${ORDNER%/*}" "$ORDNER"; do
+    [ -z "$KOMPONENTE" ] && continue
+    if [ -L "$KOMPONENTE" ]; then
+      echo -e "${ROT}Fehler: Zielordner ist ein Symlink: $KOMPONENTE${RESET}" >&2
+      return 1
+    fi
+  done
+  return 0
 }
 
 # ============================================
@@ -524,6 +558,7 @@ sortiere_datei() {
     if [ "$DRYRUN_FLAG" = "true" ]; then
       echo -e "${BLAU}VORSCHAU: $DATEINAME  ->  $JAHR/$MONAT/${RESET}"
     else
+      zielordner_sicher "$ZIELORDNER" || return 3
       mkdir -p "$ZIELORDNER" 2>/dev/null || { echo -e "${ROT}Fehler mkdir: $ZIELORDNER${RESET}"; return 3; }
       if $KOPIEREN; then
         cp -- "$DATEI" "$ZIELDATEI" 2>/dev/null
@@ -561,6 +596,7 @@ sortiere_datei() {
     if [ "$DRYRUN_FLAG" = "true" ]; then
       echo -e "${BLAU}VORSCHAU: $DATEINAME  ->  $KATEGORIE/${RESET}"
     else
+      zielordner_sicher "$ZIELORDNER" || return 3
       mkdir -p "$ZIELORDNER" 2>/dev/null || { echo -e "${ROT}Fehler mkdir: $ZIELORDNER${RESET}"; return 3; }
       if $KOPIEREN; then
         cp -- "$DATEI" "$ZIELDATEI" 2>/dev/null
@@ -586,6 +622,7 @@ sortiere_datei() {
   if [ "$DRYRUN_FLAG" = "true" ]; then
     echo -e "${GELB}VORSCHAU: $DATEINAME  ->  Sonstiges/${RESET}"
   else
+    zielordner_sicher "$ZIELORDNER" || return 3
     mkdir -p "$ZIELORDNER" 2>/dev/null || return 3
     if $KOPIEREN; then
       cp -- "$DATEI" "$ZIELDATEI" 2>/dev/null
@@ -625,6 +662,14 @@ sortiere_ordner() {
   echo "--------------------------------------------"
 
   if $UNTERORDNER; then
+    # Snapshot der Quellen erstellen, damit neu angelegte Zielverzeichnisse
+    # nicht waehrend desselben Laufs erneut verarbeitet werden.
+    local SNAPSHOT
+    SNAPSHOT=$(mktemp 2>/dev/null) || {
+      echo -e "${ROT}Fehler: Snapshot-Datei konnte nicht erstellt werden.${RESET}"
+      return 1
+    }
+    find "$ORDNER" -type f -not -name ".sortier_log.txt" -print0 > "$SNAPSHOT" 2>/dev/null
     while IFS= read -r -d '' DATEI; do
       local DATEINAME="${DATEI##*/}"
       [ "$DATEINAME" = ".sortier_log.txt" ] && continue
@@ -637,7 +682,8 @@ sortiere_ordner() {
         2) IGNORIERT=$((IGNORIERT+1)); BERICHT_IGNORIERT=$((BERICHT_IGNORIERT+1)) ;;
         3) FEHLER_ANZ=$((FEHLER_ANZ+1)); BERICHT_FEHLER=$((BERICHT_FEHLER+1)) ;;
       esac
-    done < <(find "$ORDNER" -type f -not -name ".sortier_log.txt" -print0 2>/dev/null)
+    done < "$SNAPSHOT"
+    rm -f "$SNAPSHOT"
   else
     shopt -s nullglob
     for DATEI in "$ORDNER"/*; do
@@ -663,8 +709,14 @@ sortiere_ordner() {
     [ $FEHLER_ANZ -gt 0 ] && echo -e "${ROT}Fehler: $FEHLER_ANZ${RESET}"
     echo -e "${GELB}Tipps: --undo | --log | --watch | --bericht${RESET}"
     # Bericht nur im Einzel-Modus hier; Multi-Modus ruft bericht_schreiben separat auf
-    $BERICHT && ! $MULTI_MODUS && bericht_schreiben "$ORDNER"
+    if $BERICHT && ! $MULTI_MODUS; then
+      bericht_schreiben "$ORDNER"
+    fi
   fi
+
+  # Expliziter Funktionsstatus: Sonstiges/ignorierte Dateien sind kein Fehler.
+  [ "$FEHLER_ANZ" -gt 0 ] && return 1
+  return 0
 }
 
 # ============================================
@@ -729,7 +781,7 @@ if $WATCH; then
   declare -A BEKANNTE_DATEIEN
   shopt -s nullglob
   for DATEI in "$ZIEL"/*; do
-    [ -f "$DATEI" ] && BEKANNTE_DATEIEN["${DATEI##*/}"]=1
+    [ -f "$DATEI" ] && BEKANNTE_DATEIEN["$DATEI"]="$(stat -c '%s:%Y' "$DATEI" 2>/dev/null || stat -f '%z:%m' "$DATEI" 2>/dev/null || echo unknown)"
   done
   shopt -u nullglob
   echo -e "${CYAN}${#BEKANNTE_DATEIEN[@]} bestehende Datei(en) ignoriert.${RESET}"
@@ -739,15 +791,15 @@ if $WATCH; then
     shopt -s nullglob
     for DATEI in "$ZIEL"/*; do
       [ -f "$DATEI" ] || continue
-      DATEINAME="${DATEI##*/}"
-      [ "$DATEINAME" = ".sortier_log.txt" ] && continue
-      if [ -z "${BEKANNTE_DATEIEN[$DATEINAME]+x}" ]; then
-        echo -e "${CYAN}[$(date '+%H:%M:%S')] $DATEINAME${RESET}"
+      [ "${DATEI##*/}" = ".sortier_log.txt" ] && continue
+      SIGNATUR="$(stat -c '%s:%Y' "$DATEI" 2>/dev/null || stat -f '%z:%m' "$DATEI" 2>/dev/null || echo unknown)"
+      if [ -z "${BEKANNTE_DATEIEN[$DATEI]+x}" ] || [ "${BEKANNTE_DATEIEN[$DATEI]}" != "$SIGNATUR" ]; then
+        echo -e "${CYAN}[$(date '+%H:%M:%S')] ${DATEI##*/}${RESET}"
         DATUM_LOG=$(date '+%d.%m.%Y %H:%M')
         sortiere_datei "$DATEI" "$ZIEL" "false" "$LOGDATEI" "$NACH_DATUM" "$DATUM_LOG"
         RET=$?
-        $NOTIFY && [ $RET -le 1 ] && sende_notification "Datei-Sortierer" "$DATEINAME sortiert"
-        BEKANNTE_DATEIEN["$DATEINAME"]=1; NEUE=$((NEUE+1))
+        $NOTIFY && [ $RET -le 1 ] && sende_notification "Datei-Sortierer" "${DATEI##*/} verarbeitet"
+        BEKANNTE_DATEIEN["$DATEI"]="$SIGNATUR"; NEUE=$((NEUE+1))
       fi
     done
     shopt -u nullglob
@@ -854,33 +906,52 @@ if $ZEIG_LOG; then
 fi
 
 # ============================================
-#  UNDO  (BUGFIX: Tab-Separator)
+#  UNDO  (NUL-delimited journal)
 # ============================================
 if $UNDO; then
-  [ ! -f "$LOGDATEI" ] && { echo -e "${ROT}Kein Log.${RESET}"; exit 1; }
-  echo -e "${GELB}Rueckgaengig...${RESET}"; echo "--------------------------------------------"
+  if [ ! -f "$LOGDATEI" ]; then
+    echo -e "${GELB}Keine Undo-Daten vorhanden.${RESET}"
+    exit 0
+  fi
+
+  echo -e "${CYAN}Undo: Letzte Sortierung wird rueckgaengig gemacht...${RESET}"
   TMP_LOG=$(mktemp 2>/dev/null) || { echo -e "${ROT}Fehler: mktemp fehlgeschlagen.${RESET}"; exit 1; }
-  tac "$LOGDATEI" > "$TMP_LOG"
+  cp -- "$LOGDATEI" "$TMP_LOG" 2>/dev/null || { rm -f "$TMP_LOG"; echo -e "${ROT}Log konnte nicht gelesen werden.${RESET}"; exit 1; }
+
   WIEDERHERGESTELLT=0; FEHLER_UNDO=0
-  while IFS=$'\t' read -r QUELLE ZIEL_DATEI DATUM; do
+  mapfile -d '' -t JOURNAL_FIELDS < "$TMP_LOG"
+  for ((J=0; J+2<${#JOURNAL_FIELDS[@]}; J+=3)); do
+    QUELLE="${JOURNAL_FIELDS[$J]}"
+    ZIEL_DATEI="${JOURNAL_FIELDS[$((J+1))]}"
+    DATUM="${JOURNAL_FIELDS[$((J+2))]}"
     [ -z "$QUELLE" ] && continue
-    if [ -f "$ZIEL_DATEI" ]; then
-      if mv -- "$ZIEL_DATEI" "$QUELLE" 2>/dev/null; then
-        echo -e "${GRUEN}Wiederhergestellt: ${QUELLE##*/}${RESET}"
-        WIEDERHERGESTELLT=$((WIEDERHERGESTELLT+1))
-      else
-        echo -e "${ROT}Fehler: ${QUELLE##*/}${RESET}"; FEHLER_UNDO=$((FEHLER_UNDO+1))
-      fi
-    else
-      echo -e "${ROT}Nicht vorhanden: ${ZIEL_DATEI##*/}${RESET}"; FEHLER_UNDO=$((FEHLER_UNDO+1))
+    if [ ! -e "$ZIEL_DATEI" ]; then
+      echo -e "${ROT}Nicht vorhanden: ${ZIEL_DATEI##*/}${RESET}"
+      FEHLER_UNDO=$((FEHLER_UNDO+1)); continue
     fi
-  done < "$TMP_LOG"
+    if [ -e "$QUELLE" ]; then
+      echo -e "${ROT}Ziel bereits vorhanden, nichts ueberschrieben: ${QUELLE##*/}${RESET}"
+      FEHLER_UNDO=$((FEHLER_UNDO+1)); continue
+    fi
+    if mv -- "$ZIEL_DATEI" "$QUELLE" 2>/dev/null; then
+      echo -e "${GRUEN}Wiederhergestellt: ${QUELLE##*/}${RESET}"
+      WIEDERHERGESTELLT=$((WIEDERHERGESTELLT+1))
+    else
+      echo -e "${ROT}Fehler: ${QUELLE##*/}${RESET}"
+      FEHLER_UNDO=$((FEHLER_UNDO+1))
+    fi
+  done
+
   rm -f "$TMP_LOG"
-  find "$ZIEL" -mindepth 1 -type d -empty -delete 2>/dev/null
-  rm -f "$LOGDATEI"
-  echo "--------------------------------------------"
-  echo -e "${GRUEN}Undo: $WIEDERHERGESTELLT wiederhergestellt, $FEHLER_UNDO Fehler.${RESET}"
-  exit 0
+  if [ "$FEHLER_UNDO" -eq 0 ]; then
+    find "$ZIEL" -mindepth 1 -type d -empty -delete 2>/dev/null
+    rm -f "$LOGDATEI"
+    echo -e "${GRUEN}Undo abgeschlossen: $WIEDERHERGESTELLT wiederhergestellt.${RESET}"
+    exit 0
+  fi
+
+  echo -e "${GELB}Undo unvollstaendig: $WIEDERHERGESTELLT wiederhergestellt, $FEHLER_UNDO Fehler. Journal bleibt erhalten.${RESET}"
+  exit 1
 fi
 
 # ============================================

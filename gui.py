@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # ============================================
-#  Datei-Sortierer GUI v5.0
+#  Datei-Sortierer GUI v8.0
 #  NEU:
 #  - Drag & Drop (Ordner ins Fenster ziehen)
 #  - Dark / Light Theme Umschalter
@@ -128,7 +128,7 @@ def _parse_drop(data):
 class DateiSortiererApp:
     def __init__(self, root):
         self.root = root
-        self.root.title("Datei-Sortierer v5.0")
+        self.root.title("Datei-Sortierer v8.0")
         self.root.geometry("900x780")
         self.root.minsize(800, 660)
         self.root.resizable(True, True)
@@ -447,7 +447,7 @@ class DateiSortiererApp:
         leiste = tk.Frame(parent, bg=F["bg"], pady=6)
         leiste.pack(fill="x")
         self._reg(leiste, "bg")
-        self._titelleiste_lbl = tk.Label(leiste, text="🖥  DATEI-SORTIERER – GUI v5.0",
+        self._titelleiste_lbl = tk.Label(leiste, text="🖥  DATEI-SORTIERER – GUI v8.0",
                  font=("Segoe UI", 13, "bold"),
                  bg=F["bg"], fg=F["text"])
         self._titelleiste_lbl.pack(side="left")
@@ -471,7 +471,7 @@ class DateiSortiererApp:
             tk.Button(leiste, text="", width=2, bg=farbe,
                       activebackground=farbe, relief="flat",
                       cursor="hand2", command=cmd, bd=0).pack(side="left", padx=3)
-        self._macos_titel_lbl = tk.Label(leiste, text="📁 Datei-Sortierer v5.0",
+        self._macos_titel_lbl = tk.Label(leiste, text="📁 Datei-Sortierer v8.0",
                  font=FONT, bg=F["card"], fg=F["text_dim"])
         self._macos_titel_lbl.pack(side="left", padx=12)
 
@@ -486,7 +486,7 @@ class DateiSortiererApp:
         self.titel_name_lbl = tk.Label(r, text=" Datei-Sortierer",
                  font=FONT_TITEL, bg=F["card"], fg=F["text"])
         self.titel_name_lbl.pack(side="left")
-        self.titel_version_lbl = tk.Label(r, text="  v5.0", font=("Segoe UI", 13),
+        self.titel_version_lbl = tk.Label(r, text="  v8.0", font=("Segoe UI", 13),
                  bg=F["card"], fg=F["text_dim"])
         self.titel_version_lbl.pack(side="left", pady=4)
 
@@ -809,7 +809,7 @@ class DateiSortiererApp:
                            ("header", F["akzent"])]:
             self.verlauf_text.tag_config(tag, foreground=farbe)
 
-        self._verlauf_schreiben("── Datei-Sortierer GUI v5.0 bereit ──\n", "header")
+        self._verlauf_schreiben("── Datei-Sortierer GUI v8.0 bereit ──\n", "header")
         self._verlauf_schreiben("Warte auf Aktion...\n\n", "dim")
 
     _LOG_MAX_ZEILEN = 2000
@@ -1003,7 +1003,7 @@ class DateiSortiererApp:
         bar.pack(fill="x")
         self._reg(bar, "bg")
         self.status_unten = tk.Label(
-            bar, text="GUI v5.0 – Drag & Drop  |  Dark/Light  |  Cronjob  |  Benachrichtigungen",
+            bar, text="GUI v8.0 – Drag & Drop  |  Dark/Light  |  Cronjob  |  Benachrichtigungen",
             font=FONT_KLEIN, bg=F["bg"], fg=F["gelb"])
         self.status_unten.pack(side="left")
         self._reg(self.status_unten, "bg")
@@ -1012,7 +1012,7 @@ class DateiSortiererApp:
                  font=FONT_KLEIN, bg=F["bg"],
                  fg=F["gruen"] if bash_ok else F["rot"], padx=8)
         self._bash_status_lbl.pack(side="right")
-        tk.Label(bar, text="GUI v5.0",
+        tk.Label(bar, text="GUI v8.0",
                  font=FONT_KLEIN, bg=F["bg"], fg=F["text_dim"], padx=8).pack(side="right")
 
     # ------------------------------------------
@@ -1029,6 +1029,11 @@ class DateiSortiererApp:
         except tk.TclError: pass
 
     def _vorschau_laden(self):
+        """Erzeugt die Vorschau ueber dieselbe Engine wie die echte Sortierung.
+
+        Damit bleiben GUI und Bash-Engine bei Kategorien, Config und Sonderfaellen
+        synchron. --dry-run veraendert keine Dateien.
+        """
         if not self.ordner_pfad.get():
             self._ordner_waehlen(); return
         if self.laeuft: return
@@ -1048,13 +1053,36 @@ class DateiSortiererApp:
         def _t():
             zeilen, fehler = [], None
             try:
-                for datei in sorted(os.listdir(pfad)):
-                    if not os.path.isfile(os.path.join(pfad, datei)): continue
-                    if datei.startswith("."): continue
-                    kat, ziel = get_kategorie(datei)
-                    zeilen.append((datei, kat, ziel))
-            except PermissionError: fehler = "❌  Kein Zugriff."
-            except Exception as e: fehler = f"❌  Fehler: {e}"
+                args = [pfad, "--dry-run"]
+                if self.unterordner_var.get():
+                    args.append("--unterordner")
+                proc = subprocess.run(
+                    [self.bash_pfad, self.script_pfad] + args,
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.STDOUT,
+                    text=True,
+                    encoding="utf-8",
+                    errors="replace",
+                    check=False)
+                for raw in proc.stdout.splitlines():
+                    z = _ANSI_RE.sub("", raw).strip()
+                    if not z.startswith("OK:"):
+                        continue
+                    if "->" in z:
+                        name, ziel = z[3:].split("->", 1)
+                    elif "=>" in z:
+                        name, ziel = z[3:].split("=>", 1)
+                    else:
+                        continue
+                    name = name.strip()
+                    ziel = ziel.strip()
+                    kat = ziel.rstrip("/").split("/")[-1] or "Sonstiges"
+                    if name:
+                        zeilen.append((name, kat, ziel))
+                if proc.returncode not in (0, 1):
+                    fehler = f"❌  Sortier-Engine meldet Fehler (Exit-Code {proc.returncode})."
+            except Exception as e:
+                fehler = f"❌  Vorschau fehlgeschlagen: {e}"
             finally:
                 with self._vorschau_lock: self._vorschau_laeuft = False
 
@@ -1067,15 +1095,15 @@ class DateiSortiererApp:
                                  bg=self._F["tabelle_z1"], fg=self._F["rot"], pady=20).pack()
                         self.status_text.configure(text=fehler, fg=self._F["rot"])
                     elif not zeilen:
-                        tk.Label(self.tabelle_frame, text="Keine Dateien.",
+                        tk.Label(self.tabelle_frame, text="Keine sortierbaren Dateien.",
                                  font=FONT, bg=self._F["tabelle_z1"],
                                  fg=self._F["text_dim"], pady=20).pack()
-                        self.status_text.configure(text="ℹ️  Keine Dateien.", fg=self._F["text_dim"])
+                        self.status_text.configure(text="ℹ️  Keine sortierbaren Dateien.", fg=self._F["text_dim"])
                     else:
                         for i, (d, k, z) in enumerate(zeilen):
                             self._tabelle_zeile(d, k, z, i)
                         self.status_text.configure(
-                            text=f"✅  {len(zeilen)} Datei(en) – Bereit.", fg=self._F["gruen"])
+                            text=f"✅  {len(zeilen)} Datei(en) – Vorschau aus Sortier-Engine.", fg=self._F["gruen"])
                     self.vorschau_btn.configure(state="normal")
                 except tk.TclError: pass
             self._nach(_upd)
