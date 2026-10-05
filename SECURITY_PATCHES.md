@@ -1,8 +1,8 @@
-# Security Patches – v8.1
+# Security Patches – v8.2
 
-This document records the security hardening included in the v8.1 refactoring branch.
+This document records the security hardening included in the v8.2 refactoring branch.
 
-## v8.1
+## v8.2
 
 ### P1 – Cronjob command construction
 Cronjob paths are now passed through shell-safe single-quote escaping before being written to crontab. Newline and non-printable characters are rejected as an additional validation layer.
