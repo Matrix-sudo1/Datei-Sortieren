@@ -809,7 +809,7 @@ class DateiSortiererApp:
                            ("header", F["akzent"])]:
             self.verlauf_text.tag_config(tag, foreground=farbe)
 
-        self._verlauf_schreiben("── Datei-Sortierer GUI v5.0 bereit ──\n", "header")
+        self._verlauf_schreiben("── Datei-Sortierer GUI v8.0 bereit ──\n", "header")
         self._verlauf_schreiben("Warte auf Aktion...\n\n", "dim")
 
     _LOG_MAX_ZEILEN = 2000
