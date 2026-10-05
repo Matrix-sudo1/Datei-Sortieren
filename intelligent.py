@@ -154,7 +154,7 @@ def add_learning_rule(folder: str | Path, rule: dict, categories: dict[str, set[
     rules = load_learning_rules(folder, categories)
     normalized = _validate_rule(rule, categories)
     if any(existing["id"] == normalized["id"] for existing in rules):
-        raise ValueError(f"rule already exists: {normalized["id"]}")
+        raise ValueError(f"rule already exists: {normalized['id']}")
     if any(existing["source"] == normalized["source"] and existing["pattern"] == normalized["pattern"] for existing in rules):
         raise ValueError("rule with the same source and pattern already exists")
     rules.append(normalized)
