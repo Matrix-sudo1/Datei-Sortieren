@@ -333,6 +333,13 @@ def build_parser() -> argparse.ArgumentParser:
     intelligent.add_argument("--recursive", action="store_true")
     intelligent.add_argument("--profile")
     intelligent.add_argument("--config")
+    intelligent_sort = sub.add_parser("intelligent-sort", help="sort confirmed high-confidence intelligent proposals")
+    intelligent_sort.add_argument("folder")
+    intelligent_sort.add_argument("--recursive", action="store_true")
+    intelligent_sort.add_argument("--profile")
+    intelligent_sort.add_argument("--config")
+    intelligent_sort.add_argument("--confirm", action="store_true")
+    intelligent_sort.add_argument("--include-review", action="store_true")
 
     def common(p: argparse.ArgumentParser) -> None:
         p.add_argument("folder")
@@ -393,6 +400,50 @@ def main() -> int:
             2,
             [{"event": "error", "status": "error", "message": str(exc)}],
         )
+
+    if ns.command == "intelligent-sort":
+        if not os.path.isdir(ns.folder):
+            return json_response(False, 2, [{"event": "error", "status": "error", "message": f"folder not found: {ns.folder}"}])
+        try:
+            config_path = ns.config
+            if ns.profile:
+                if not CATEGORY_RE.fullmatch(ns.profile):
+                    raise ValueError("invalid profile name")
+                config_path = str(ROOT / "profile" / f"{ns.profile}.txt")
+            categories = load_categories(config_path or str(ROOT / "config.txt"))
+            results = classify_folder(ns.folder, categories, ns.recursive)
+            eligible = [r for r in results if r.get("decision") == "auto" or (ns.include_review and r.get("decision") == "review")]
+            if not ns.confirm:
+                return json_response(True, 0, [{"event": "intelligent-sort", "status": "confirmation_required", "eligible": len(eligible), "review": sum(1 for r in results if r.get("decision") == "review"), "leave": sum(1 for r in results if r.get("decision") == "leave"), "message": "Explicit confirmation required; no files changed."}])
+            if not eligible:
+                return json_response(True, 0, [{"event": "intelligent-sort", "status": "nothing_to_sort", "message": "No confirmed intelligent proposals eligible for sorting."}])
+            import tempfile
+            root = Path(ns.folder).expanduser().resolve()
+            fd, plan_name = tempfile.mkstemp(prefix=".intelligent-plan-", dir=root)
+            os.chmod(plan_name, 0o600)
+            try:
+                with os.fdopen(fd, "wb") as handle:
+                    for item in eligible:
+                        source = Path(item["source"]).expanduser().resolve()
+                        if not source.is_file() or source.is_symlink():
+                            raise ValueError(f"invalid intelligent plan source: {source}")
+                        if not ns.recursive and source.parent != root:
+                            raise ValueError("intelligent plan source is outside the target folder")
+                        signature = subprocess.check_output(["stat", "-c", "%d:%i:%s:%Y", str(source)], text=True).strip()
+                        handle.write(str(source).encode("utf-8") + b"\0" + item["category"].encode("utf-8") + b"\0" + signature.encode("ascii") + b"\0")
+                    handle.flush()
+                    os.fsync(handle.fileno())
+                engine_args = [str(root), "--intelligent-plan", plan_name]
+                if ns.recursive:
+                    engine_args.append("--unterordner")
+                return run_engine(engine_args)
+            finally:
+                try:
+                    os.unlink(plan_name)
+                except FileNotFoundError:
+                    pass
+        except (OSError, ValueError, subprocess.SubprocessError) as exc:
+            return json_response(False, 2, [{"event": "error", "status": "error", "message": str(exc)}])
 
     if ns.command == "intelligent-preview":
         if not os.path.isdir(ns.folder):
