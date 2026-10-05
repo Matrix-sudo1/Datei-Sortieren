@@ -300,3 +300,16 @@ Die API verhindert außerdem widersprüchliche Regeln mit identischer Quelle und
 Die GUI besitzt einen eigenen **Lernregeln**-Tab. Dort werden Status, Quelle, Muster und Zielkategorie angezeigt; Regeln können aktiviert, deaktiviert oder gelöscht werden. Die Intelligent-Vorschau kann anschließend sofort erneut ausgeführt werden.
 
 Die Explainability-Daten sind ebenfalls Bestandteil der intelligenten Klassifizierung und damit der Phase-7-Reports: Bei einer angewendeten Lernregel werden `signal=learning_rule`, `rule_id`, `rule_source` und eine menschenlesbare Begründung gespeichert.
+
+
+## v9.0 Phase 10 – Release Hardening
+
+Die Automation wurde für den Release-Kandidaten weiter gehärtet:
+
+- Der API-Status akzeptiert einen gespeicherten PID-Eintrag nur noch, wenn /proc/<pid>/cmdline weiterhin exakt auf die erwartete Watch-Engine, den Zielordner und --watch zeigt.
+- Bei PID-Wiederverwendung oder einem nicht mehr passenden Prozess wird der Automation-Status verworfen.
+- Das Automation-Intervall ist über API und GUI zwischen 1 und 86400 Sekunden konfigurierbar.
+- Die GUI kann für die Automation optional Profil, Config-Datei und Ignore-Datei übergeben.
+- Die GUI führt Statusabfragen nicht mehr doppelt aus.
+
+Damit bleibt die Automation nach einem Neustart bzw. bei einer PID-Wiederverwendung fail-closed, bevor Steuerbefehle an einen fremden Prozess gesendet werden.
