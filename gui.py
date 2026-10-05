@@ -1352,6 +1352,11 @@ class DateiSortiererApp:
                            else "rot" if status == "error" or event_type == "error"
                            else None)
                     self._nach(self._verlauf_schreiben, f"  {line}\n", tag)
+                    if event_type == "automation" and hasattr(self, "automation_status_lbl"):
+                        status_value = event.get("status", "unknown")
+                        pid = event.get("pid")
+                        label = f"Status: {status_value}" + (f"  (PID {pid})" if pid else "")
+                        self._nach(self.automation_status_lbl.configure, text=label)
                 if not payload.get("success", False):
                     error = next((e.get("message", "API-Fehler") for e in payload.get("events", [])
                                   if e.get("event") == "error"), "API-Fehler")
