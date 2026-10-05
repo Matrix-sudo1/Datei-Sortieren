@@ -11,40 +11,47 @@ fail() {
 }
 
 echo "[1/1] v9.0 Phase 10 Release Hardening"
-mkdir -p "$TMP/automation"
+mkdir -p "$TMP/automation/.datei-sortierer"
+chmod 700 "$TMP/automation/.datei-sortierer"
 
-python3 "$ROOT/api.py" automation-start "$TMP/automation" --interval 2 > "$TMP/start.json" || true
-python3 - "$TMP/start.json" <<'PY'
+python3 - "$TMP/automation/.datei-sortierer/automation.json" "$TMP/automation" "$$" <<'PY'
 import json,sys
-p=json.load(open(sys.argv[1],encoding="utf-8"))
-assert p["success"] and p["events"][0]["status"] == "running", p
-with open(sys.argv[1] + ".pid","w",encoding="utf-8") as handle:
-    handle.write(str(p["events"][0]["pid"]))
-PY
-read -r AUTO_PID < "$TMP/start.json.pid"
-
-STATE="$TMP/automation/.datei-sortierer/automation.json"
-python3 - "$STATE" "$$" <<'PY'
-import json,sys
-path,pid=sys.argv[1],int(sys.argv[2])
-state=json.load(open(path,encoding="utf-8"))
-state["pid"]=pid
+path,folder,pid=sys.argv[1],sys.argv[2],int(sys.argv[3])
+state={
+    "status":"running",
+    "pid":pid,
+    "folder":folder,
+    "options":{"interval":2},
+}
 with open(path,"w",encoding="utf-8") as handle:
     json.dump(state,handle)
 PY
+chmod 600 "$TMP/automation/.datei-sortierer/automation.json"
 
 python3 "$ROOT/api.py" automation-status "$TMP/automation" > "$TMP/stale.json"
 python3 - "$TMP/stale.json" <<'PY'
 import json,sys
 p=json.load(open(sys.argv[1],encoding="utf-8"))
 assert p["success"] and p["events"][0]["status"] == "stopped", p
+assert "expected watch process" in p["events"][0]["message"], p
 PY
 
-kill "$AUTO_PID" 2>/dev/null || true
-rm -f "$STATE"
+python3 - "$ROOT" <<'PY'
+import sys
+sys.path.insert(0,sys.argv[1])
+from api import automation_process_matches
+assert automation_process_matches(1, "/tmp") is False
+PY
 
 python3 "$ROOT/api.py" automation-start "$TMP/automation" --interval 0 > "$TMP/bad-interval.json" || true
 python3 - "$TMP/bad-interval.json" <<'PY'
+import json,sys
+p=json.load(open(sys.argv[1],encoding="utf-8"))
+assert not p["success"] and p["exit_code"] == 2, p
+PY
+
+python3 "$ROOT/api.py" automation-start "$TMP/automation" --interval 86401 > "$TMP/bad-interval-high.json" || true
+python3 - "$TMP/bad-interval-high.json" <<'PY'
 import json,sys
 p=json.load(open(sys.argv[1],encoding="utf-8"))
 assert not p["success"] and p["exit_code"] == 2, p
