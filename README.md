@@ -1,6 +1,6 @@
 # 📂 Datei-Sortierer
 
-Ein Bash-basierter Datei-Sortierer mit optionaler Tkinter-GUI. Version **v8.8** konzentriert sich auf Stabilität, sichere Pfadbehandlung, reproduzierbare Tests und eine gemeinsame Sortier-Engine für CLI und GUI.
+Ein Bash-basierter Datei-Sortierer mit optionaler Tkinter-GUI. Version **v9.0** erweitert die stabile Automation-Basis um deterministische intelligente Klassifizierung und konzentriert sich auf Stabilität, sichere Pfadbehandlung, reproduzierbare Tests und eine gemeinsame Sortier-Engine für CLI und GUI.
 
 ## Kernfunktionen
 
@@ -74,6 +74,8 @@ python3 api.py undo ~/Downloads
 python3 api.py log ~/Downloads
 python3 api.py config config.txt
 python3 api.py profiles
+python3 api.py intelligent-preview ~/Downloads
+python3 api.py intelligent-preview ~/Downloads --recursive
 python3 api.py automation-start ~/Downloads --recursive
 python3 api.py automation-status ~/Downloads
 python3 api.py automation-pause ~/Downloads
@@ -219,3 +221,25 @@ python3 api.py automation-stop ~/Downloads
 Die GUI enthält dafür einen eigenen **Automation**-Tab. Der bestehende Sortierkern bleibt unverändert die zentrale Quelle für Sortierentscheidungen.
 
 Die Zustandsdatei enthält nur PID, Status, Zielordner, Optionen und Startzeit. Sie wird mit restriktiven Dateirechten geschrieben und atomar ersetzt.
+
+## v9.0 Intelligent Sorting
+
+v9.0 führt eine deterministische Klassifizierungsschicht ein. Sie schlägt für jede reguläre Datei eine Kategorie, eine Konfidenz, eine Begründung und die verwendete Signalquelle vor.
+
+Priorität der Signale:
+
+1. explizite Dateiendung aus der geladenen Konfiguration → **Konfidenz 1.00**
+2. ermittelter MIME-Typ → **Konfidenz 0.85**
+3. konservative Dateinamen-Signale → **Konfidenz bis 0.65**
+4. kein belastbares Signal → **Sonstiges / Konfidenz 0.00**
+
+Die Klassifizierung ist absichtlich nur eine Vorschlagsinstanz. Sie verschiebt, löscht oder benennt keine Dateien. Damit bleibt die bestehende Bash-Sortierengine die alleinige Autorität für reale Dateioperationen und das bestehende Undo-Journal bleibt vollständig wirksam.
+
+Der JSON-Endpunkt ist:
+
+    python3 api.py intelligent-preview ~/Downloads
+    python3 api.py intelligent-preview ~/Downloads --recursive
+    python3 api.py intelligent-preview ~/Downloads --profile buero
+    python3 api.py intelligent-preview ~/Downloads --config meine.txt
+
+Jedes Ereignis enthält mindestens source, category, confidence, reason und die Signalquelle. Dadurch kann eine spätere GUI- oder Automationsschicht Vorschläge anzeigen oder anhand definierter Konfidenzgrenzen bewerten, ohne direkt in den Sortierkern einzugreifen.
