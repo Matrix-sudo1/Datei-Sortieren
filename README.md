@@ -282,3 +282,21 @@ python3 api.py intelligent-rule-remove ~/Downloads --id ext-xyz-code
 ```
 
 In der GUI kann ein intelligenter Vorschlag über **Als Regel übernehmen** als dauerhafte Korrektur gespeichert werden. Die nächste Intelligent-Vorschau verwendet die Regel deterministisch und weist das verwendete `rule_id` aus.
+
+
+## v9.0 Phase 9 – Rule Management & Explainability
+
+Die Lernregeln können jetzt vollständig verwaltet werden. Über die JSON-API lassen sich Regeln auflisten, aktivieren/deaktivieren und löschen:
+
+```bash
+python3 api.py intelligent-rules ~/Downloads
+python3 api.py intelligent-rule-set ~/Downloads --id ext-xyz-code --enabled false
+python3 api.py intelligent-rule-set ~/Downloads --id ext-xyz-code --enabled true
+python3 api.py intelligent-rule-remove ~/Downloads --id ext-xyz-code
+```
+
+Die API verhindert außerdem widersprüchliche Regeln mit identischer Quelle und identischem Muster. Dadurch bleibt die Regelauflösung deterministisch.
+
+Die GUI besitzt einen eigenen **Lernregeln**-Tab. Dort werden Status, Quelle, Muster und Zielkategorie angezeigt; Regeln können aktiviert, deaktiviert oder gelöscht werden. Die Intelligent-Vorschau kann anschließend sofort erneut ausgeführt werden.
+
+Die Explainability-Daten sind ebenfalls Bestandteil der intelligenten Klassifizierung und damit der Phase-7-Reports: Bei einer angewendeten Lernregel werden `signal=learning_rule`, `rule_id`, `rule_source` und eine menschenlesbare Begründung gespeichert.
