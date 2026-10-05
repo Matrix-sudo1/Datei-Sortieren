@@ -240,6 +240,13 @@ python3 "$ROOT/api.py" intelligent-preview "$TMP/intelligent" >/dev/null
 after=$(find "$TMP/intelligent" -type f -print | sort | sha256sum)
 [ "$before" = "$after" ] || fail "Intelligent Preview hat Dateien veraendert"
 
+echo "[18/18] v9.0 GUI Intelligent Preview"
+grep -Fq 'def _intelligent_vorschau(self):' "$ROOT/gui.py" || fail "GUI Intelligent Preview fehlt"
+grep -Fq 'intelligent-preview' "$ROOT/gui.py" || fail "GUI nutzt Intelligent-Preview API nicht"
+grep -Fq 'self.intelligent_btn' "$ROOT/gui.py" || fail "GUI Intelligent Button fehlt"
+grep -Fq 'confidence' "$ROOT/gui.py" || fail "GUI zeigt Konfidenz nicht an"
+grep -Fq 'reason' "$ROOT/gui.py" || fail "GUI zeigt Klassifizierungsgrund nicht an"
+
 echo "PASS: v9.0 intelligent sorting tests"
 
 INVALID_PROFILE_OUTPUT=$(python3 "$ROOT/api.py" intelligent-preview "$TMP/intelligent" --profile ../config || true)
