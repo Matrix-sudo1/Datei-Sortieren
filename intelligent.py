@@ -15,6 +15,21 @@ from typing import Iterable
 DEFAULT_CONFIG = Path(__file__).resolve().parent / "config.txt"
 TOKEN_RE = re.compile(r"[a-z0-9]+")
 
+# Confidence policy for intelligent proposals. This is deliberately proposal-only:
+# no policy decision invokes the Bash sorting engine.
+CONFIDENCE_AUTO = 0.85
+CONFIDENCE_REVIEW = 0.65
+
+
+def confidence_policy(confidence: float) -> dict[str, str]:
+    """Map deterministic confidence to an explicit, non-destructive decision."""
+    value = float(confidence)
+    if value >= CONFIDENCE_AUTO:
+        return {"decision": "auto", "confidence_band": "high", "policy": "high-confidence proposal; explicit confirmation still required"}
+    if value >= CONFIDENCE_REVIEW:
+        return {"decision": "review", "confidence_band": "medium", "policy": "review recommended before sorting"}
+    return {"decision": "leave", "confidence_band": "low", "policy": "do not automatically sort"}
+
 # Conservative filename signals. They are only used when extension/MIME data
 # does not already provide a stronger deterministic classification.
 NAME_HINTS = {
@@ -152,6 +167,7 @@ def classify_folder(folder: str | Path, categories: dict[str, set[str]], recursi
     results = []
     for path in iter_files(folder, recursive):
         result = classify_file(path, categories)
+        result.update(confidence_policy(result["confidence"]))
         result["source"] = str(path)
         results.append(result)
     return results
