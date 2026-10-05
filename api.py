@@ -654,11 +654,9 @@ def main() -> int:
 
     if ns.command.startswith("automation-"):
         try:
-            if ns.command == "automation-start" and ns.interval < 1:
-                raise ValueError("interval must be a positive integer")
             if ns.command == "automation-start":
-        if ns.interval < 1 or ns.interval > 86400:
-            return json_response(False, 2, [{"event": "automation", "status": "error", "message": "interval must be between 1 and 86400 seconds"}])
+                if ns.interval < 1 or ns.interval > 86400:
+                    raise ValueError("interval must be between 1 and 86400 seconds")
                 options = {
                     "recursive": ns.recursive,
                     "date": ns.date,
