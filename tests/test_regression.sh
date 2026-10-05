@@ -290,7 +290,7 @@ printf 'unknown' > "$TMP/intelligent-selection/project_code.zzz"
 printf 'unknown' > "$TMP/intelligent-selection/mystery.zzz"
 PREVIEW_SELECTION=$(python3 "$ROOT/api.py" intelligent-preview "$TMP/intelligent-selection")
 printf '%s' "$PREVIEW_SELECTION" | python3 -c 'import json,sys; p=json.load(sys.stdin); assert p["success"], p; events=p["events"]; assert any(e.get("event")=="intelligent-plan" and e.get("plan_hash") for e in events), p'
-PLAN_HASH=$(printf '%s' "$PREVIEW_SELECTION" | python3 -c 'import json,sys; p=json.load(sys.stdin); print(next(e["plan_hash"] for e in p["events"] if e.get("event")=="intelligent-plan"))'
+PLAN_HASH=$(printf '%s' "$PREVIEW_SELECTION" | python3 -c 'import json,sys; p=json.load(sys.stdin); print(next(e["plan_hash"] for e in p["events"] if e.get("event")=="intelligent-plan"))')
 AUTO_SOURCE="$TMP/intelligent-selection/auto.jpg"
 REVIEW_SOURCE="$TMP/intelligent-selection/project_code.zzz"
 SELECTED=$(python3 "$ROOT/api.py" intelligent-sort "$TMP/intelligent-selection" --confirm --plan-hash "$PLAN_HASH" --select "$AUTO_SOURCE")
