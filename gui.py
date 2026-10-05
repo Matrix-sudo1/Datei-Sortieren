@@ -494,7 +494,7 @@ class DateiSortiererApp:
         self.titel_name_lbl = tk.Label(r, text=" Datei-Sortierer",
                  font=FONT_TITEL, bg=F["card"], fg=F["text"])
         self.titel_name_lbl.pack(side="left")
-        self.titel_version_lbl = tk.Label(r, text="  v8.1", font=("Segoe UI", 13),
+        self.titel_version_lbl = tk.Label(r, text="  v9.0", font=("Segoe UI", 13),
                  bg=F["card"], fg=F["text_dim"])
         self.titel_version_lbl.pack(side="left", pady=4)
 
