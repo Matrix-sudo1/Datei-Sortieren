@@ -18,7 +18,7 @@ from pathlib import Path
 import signal
 import time
 
-from intelligent import (classify_folder, load_categories, confidence_policy, load_learning_rules, add_learning_rule, remove_learning_rule, rules_path)
+from intelligent import (classify_folder, load_categories, confidence_policy, load_learning_rules, add_learning_rule, remove_learning_rule, set_learning_rule_enabled, rules_path)
 
 API_VERSION = "1"
 ROOT = Path(__file__).resolve().parent
@@ -437,6 +437,10 @@ def build_parser() -> argparse.ArgumentParser:
     rule_remove = sub.add_parser("intelligent-rule-remove", help="remove a deterministic learning rule")
     rule_remove.add_argument("folder")
     rule_remove.add_argument("--id", required=True)
+    rule_set = sub.add_parser("intelligent-rule-set", help="enable or disable a deterministic learning rule")
+    rule_set.add_argument("folder")
+    rule_set.add_argument("--id", required=True)
+    rule_set.add_argument("--enabled", choices=["true", "false"], required=True)
 
     sub.add_parser("profiles", help="list available profiles")
     return parser
@@ -466,7 +470,7 @@ def main() -> int:
             categories = load_categories(config_path or str(ROOT / "config.txt"))
             if ns.command == "intelligent-rules":
                 rules = load_learning_rules(ns.folder, categories)
-                return json_response(True, 0, [{"event": "learning-rule", "status": "ok", **rule} for rule in rules])
+                return json_response(True, 0, [{"event": "learning-rule", "status": "ok", **rule, "source_label": {"extension": "Dateiendung", "mime": "MIME-Typ", "filename_token": "Dateiname-Token"}.get(rule["source"], rule["source"])} for rule in rules])
             if ns.command == "intelligent-rule-add":
                 rule_id = ns.id or f"{ns.source}-{ns.pattern.lower()}-{ns.category.lower()}".replace(" ", "-")
                 rule, path = add_learning_rule(ns.folder, {
@@ -477,6 +481,9 @@ def main() -> int:
                     "enabled": True,
                 }, categories)
                 return json_response(True, 0, [{"event": "learning-rule", "status": "created", **rule, "path": str(path)}])
+            if ns.command == "intelligent-rule-set":
+                rule = set_learning_rule_enabled(ns.folder, ns.id, ns.enabled == "true", categories)
+                return json_response(True, 0, [{"event": "learning-rule", "status": "updated", **rule, "path": str(rules_path(ns.folder))}])
             path = remove_learning_rule(ns.folder, ns.id, categories)
             return json_response(True, 0, [{"event": "learning-rule", "status": "removed", "id": ns.id, "path": str(path)}])
         except (OSError, ValueError) as exc:
