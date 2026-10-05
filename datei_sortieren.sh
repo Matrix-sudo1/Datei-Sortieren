@@ -16,8 +16,8 @@ if ! command -v tac &>/dev/null; then
 fi
 
 # --- Farben ---
-ROT='|&nbsp;|&nbsp;v8.1033[0;31m'; GRUEN='|&nbsp;|&nbsp;v8.1033[0;32m'; GELB='|&nbsp;|&nbsp;v8.1033[1;33m'
-BLAU='|&nbsp;|&nbsp;v8.1033[0;34m'; CYAN='|&nbsp;|&nbsp;v8.1033[0;36m'; MAGENTA='|&nbsp;|&nbsp;v8.1033[0;35m'; RESET='|&nbsp;|&nbsp;v8.1033[0m'
+ROT='\033[0;31m'; GRUEN='\033[0;32m'; GELB='\033[1;33m'
+BLAU='\033[0;34m'; CYAN='\033[0;36m'; MAGENTA='\033[0;35m'; RESET='\033[0m'
 
 # --- Betriebssystem ---
 OS_TYP="linux"
@@ -67,10 +67,10 @@ sende_notification() {
   # PATCH: Alle Shell-gefährlichen Zeichen entfernen
   # Backticks, $(), Backslashes und Anführungszeichen werden neutralisiert
   local SAFE_T SAFE_X
-  SAFE_T=$(printf '%s' "$TITEL" | tr -d '"`|&nbsp;|&nbsp;v8.1|&nbsp;|&nbsp;v8.1$')
-  SAFE_X=$(printf '%s' "$TEXT"  | tr -d '"`|&nbsp;|&nbsp;v8.1|&nbsp;|&nbsp;v8.1$')
+  SAFE_T=$(printf '%s' "$TITEL" | tr -d '"`\\$')
+  SAFE_X=$(printf '%s' "$TEXT"  | tr -d '"`\\$')
   if [ "$OS_TYP" = "macos" ]; then
-    osascript -e "display notification |&nbsp;|&nbsp;v8.1"$SAFE_X|&nbsp;|&nbsp;v8.1" with title |&nbsp;|&nbsp;v8.1"$SAFE_T|&nbsp;|&nbsp;v8.1"" 2>/dev/null || true
+    osascript -e "display notification \"$SAFE_X\" with title \"$SAFE_T\"" 2>/dev/null || true
   elif command -v notify-send &>/dev/null; then
     notify-send "$SAFE_T" "$SAFE_X" --icon=folder 2>/dev/null || true
   elif command -v zenity &>/dev/null; then
@@ -245,7 +245,7 @@ cronjob_einrichten() {
   local STUNDE="${UHRZEIT%%:*}" MINUTE="${UHRZEIT##*:}"
   local SCRIPT_PFAD="$BASIS_DIR/datei_sortieren.sh"
   # PATCH: Pfad auf druckbare Zeichen ohne Newline beschränken
-  if [[ "$ORDNER" =~ $'|&nbsp;|&nbsp;v8.1n' ]] || [[ "$ORDNER" =~ $'|&nbsp;|&nbsp;v8.1r' ]]; then
+  if [[ "$ORDNER" =~ $'\n' ]] || [[ "$ORDNER" =~ $'\r' ]]; then
     echo -e "${ROT}Fehler: Pfad enthält ungültige Zeichen (Zeilenumbruch).${RESET}"; exit 1
   fi
   if [[ "$ORDNER" =~ [^[:print:]] ]]; then
@@ -254,7 +254,7 @@ cronjob_einrichten() {
   # Shell-sichere Einzelquotierung: Pfade koennen Sonderzeichen enthalten, ohne Cron-Shell-Syntax zu aktivieren.
   cron_quote() {
     local VALUE="$1"
-    VALUE="${VALUE//|&nbsp;|&nbsp;v8.1'/|&nbsp;|&nbsp;v8.1'|&nbsp;|&nbsp;v8.1|&nbsp;|&nbsp;v8.1|&nbsp;|&nbsp;v8.1'|&nbsp;|&nbsp;v8.1'}"
+    VALUE="${VALUE//\'/\'\\\'\'}"
     printf "'%s'" "$VALUE"
   }
   local SCRIPT_QUOTED ORDNER_QUOTED
@@ -263,7 +263,7 @@ cronjob_einrichten() {
   local CRON_CMD="$MINUTE $STUNDE * * * bash $SCRIPT_QUOTED $ORDNER_QUOTED $CRONJOB_TAG"
   # PATCH: Sicherstellen, dass der Eintrag wirklich nur eine Zeile ist
   if [[ "$(printf '%s' "$CRON_CMD" | wc -l)" -gt 0 ]]; then
-    if printf '%s' "$CRON_CMD" | grep -q $'|&nbsp;|&nbsp;v8.1n'; then
+    if printf '%s' "$CRON_CMD" | grep -q $'\n'; then
       echo -e "${ROT}Fehler: Cron-Eintrag enthält mehrere Zeilen – Abbruch.${RESET}"; exit 1
     fi
   fi
@@ -292,7 +292,7 @@ if $CRONJOB_LIST; then
     MIN=$(echo "$ZEILE" | awk '{print $1}')
     STD=$(echo "$ZEILE" | awk '{print $2}')
     ORD=$(echo "$ZEILE" | awk -F'"' '{print $(NF-1)}')
-    printf "  ${GRUEN}%02d:%02d Uhr${RESET}  →  %s|&nbsp;|&nbsp;v8.1n" "$STD" "$MIN" "$ORD"
+    printf "  ${GRUEN}%02d:%02d Uhr${RESET}  →  %s\n" "$STD" "$MIN" "$ORD"
     GEFUNDEN=$((GEFUNDEN+1))
   done < <(crontab -l 2>/dev/null)
   [ $GEFUNDEN -eq 0 ] && echo -e "  ${GELB}Keine Eintraege.${RESET}"
@@ -370,7 +370,7 @@ laden_kategorien() {
     while IFS='=' read -r KAT ENDUNGEN; do
       [[ "$KAT" =~ ^# || -z "${KAT// }" ]] && continue
       KAT="${KAT// /}"
-      if [ -z "$KAT" ] || [[ "$KAT" == *"/"* || "$KAT" == *"|&nbsp;|&nbsp;v8.1|&nbsp;|&nbsp;v8.1"* || "$KAT" == "." || "$KAT" == ".." || "$KAT" =~ [^[:print:]] ]]; then
+      if [ -z "$KAT" ] || [[ "$KAT" == *"/"* || "$KAT" == *"\\"* || "$KAT" == "." || "$KAT" == ".." || "$KAT" =~ [^[:print:]] ]]; then
         echo -e "${ROT}Fehler: Ungueltiger Kategoriename in ${CONFIGDATEI##*/}: '$KAT'${RESET}" >&2
         continue
       fi
@@ -413,7 +413,7 @@ _lade_standard_kategorien() {
 log_schreiben() {
   local LOGDATEI="$1" QUELLE="$2" ZIEL_DATEI="$3" DATUM="$4"
   {
-    printf '%s|&nbsp;|&nbsp;v8.10%s|&nbsp;|&nbsp;v8.10%s|&nbsp;|&nbsp;v8.10' "$QUELLE" "$ZIEL_DATEI" "$DATUM"
+    printf '%s\0%s\0%s\0' "$QUELLE" "$ZIEL_DATEI" "$DATUM"
   } >> "$LOGDATEI" 2>/dev/null
 }
 
@@ -428,7 +428,7 @@ html_escape() {
   STR="${STR//&/&amp;}"
   STR="${STR//</&lt;}"
   STR="${STR//>/&gt;}"
-  STR="${STR//|&nbsp;|&nbsp;v8.1"/&quot;}"
+  STR="${STR//\"/&quot;}"
   echo "$STR"
 }
 
@@ -487,7 +487,7 @@ bericht_schreiben() {
   <div class="card"><div class="num lila">$GESAMT</div><div class="lbl">Gesamt</div></div>
 </div>
 <div class="section"><h2>📊 Kategorien</h2>$KAT_HTML</div>
-<div class="meta">Start: $BERICHT_START &nbsp;|&nbsp; Ende: $ENDE &nbsp;|&nbsp; v8.0</div>
+<div class="meta">Start: $BERICHT_START &nbsp;|&nbsp; Ende: $ENDE &nbsp;|&nbsp; v8.1</div>
 </body></html>
 HTMLEOF
 
@@ -758,7 +758,7 @@ if $WATCH; then
   $NOTIFY && echo -e "${CYAN}Benachrichtigungen: aktiv${RESET}"
   echo "--------------------------------------------"
 
-  trap 'echo -e "|&nbsp;|&nbsp;v8.1n${GELB}Watch-Modus beendet.${RESET}"; exit 0' INT TERM
+  trap 'echo -e "\n${GELB}Watch-Modus beendet.${RESET}"; exit 0' INT TERM
 
   if command -v inotifywait &>/dev/null; then
     echo -e "${GRUEN}Echtzeit-Ueberwachung (inotifywait)${RESET}"; echo ""
@@ -817,7 +817,7 @@ if $DUPLIKATE; then
   echo -e "${CYAN}Suche in: $ZIEL${RESET}"; echo "--------------------------------------------"
 
   if ! command -v md5sum &>/dev/null; then
-    command -v md5 &>/dev/null && md5sum() { md5 -r "$@"; } |&nbsp;|&nbsp;v8.1
+    command -v md5 &>/dev/null && md5sum() { md5 -r "$@"; } \
       || { echo -e "${ROT}md5sum nicht gefunden.${RESET}"; exit 1; }
   fi
 
@@ -831,7 +831,7 @@ if $DUPLIKATE; then
     HASH=$(md5sum "$DATEI" 2>/dev/null | awk '{print $1}')
     [ -z "$HASH" ] && continue
     if [ -n "${HASH_MAP[$HASH]+x}" ]; then
-      HASH_MAP[$HASH]="${HASH_MAP[$HASH]}"$'|&nbsp;|&nbsp;v8.1x00'"$DATEI"
+      HASH_MAP[$HASH]="${HASH_MAP[$HASH]}"$'\x00'"$DATEI"
     else
       HASH_MAP[$HASH]="$DATEI"
     fi
@@ -840,14 +840,14 @@ if $DUPLIKATE; then
   DUPLIKAT_GRUPPEN=0
   for HASH in "${!HASH_MAP[@]}"; do
     # PATCH M2: Lesen mit Null-Byte statt IFS='|'
-    IFS=$'|&nbsp;|&nbsp;v8.1x00' read -r -d '' -a DATEIEN <<< "${HASH_MAP[$HASH]}"$'|&nbsp;|&nbsp;v8.1x00'
+    IFS=$'\x00' read -r -d '' -a DATEIEN <<< "${HASH_MAP[$HASH]}"$'\x00'
     [ ${#DATEIEN[@]} -le 1 ] && continue
     DUPLIKAT_GRUPPEN=$((DUPLIKAT_GRUPPEN+1))
     GROESSE=$(du -h "${DATEIEN[0]}" 2>/dev/null | awk '{print $1}')
     echo -e "${MAGENTA}Gruppe $DUPLIKAT_GRUPPEN  [${HASH:0:8}...]  ${GROESSE:-?}${RESET}"
     for i in "${!DATEIEN[@]}"; do
-      [ $i -eq 0 ] |&nbsp;|&nbsp;v8.1
-        && echo -e "  ${GRUEN}[ORIGINAL] ${DATEIEN[$i]}${RESET}" |&nbsp;|&nbsp;v8.1
+      [ $i -eq 0 ] \
+        && echo -e "  ${GRUEN}[ORIGINAL] ${DATEIEN[$i]}${RESET}" \
         || echo -e "  ${GELB}[DUPLIKAT] ${DATEIEN[$i]}${RESET}"
     done
     echo -e "${CYAN}[1] Papierkorb  [2] Endgueltig loeschen  [3] nach 'Duplikate/'  [4] Ueberspringen${RESET}"
@@ -865,23 +865,23 @@ if $DUPLIKATE; then
          BESTAETIGUNG=""; read -r -t 10 BESTAETIGUNG || BESTAETIGUNG="n"
          if [[ "$BESTAETIGUNG" =~ ^[jJyY]$ ]]; then
            for i in "${!DATEIEN[@]}"; do
-             [ $i -gt 0 ] && rm -- "${DATEIEN[$i]}" 2>/dev/null |&nbsp;|&nbsp;v8.1
-               && echo -e "${ROT}Geloescht: ${DATEIEN[$i]##*/}${RESET}" |&nbsp;|&nbsp;v8.1
+             [ $i -gt 0 ] && rm -- "${DATEIEN[$i]}" 2>/dev/null \
+               && echo -e "${ROT}Geloescht: ${DATEIEN[$i]##*/}${RESET}" \
                || echo -e "${ROT}Fehler: ${DATEIEN[$i]}${RESET}"
            done
          else echo -e "${BLAU}Abgebrochen.${RESET}"; fi ;;
       3) mkdir -p "$ZIEL/Duplikate" 2>/dev/null
          for i in "${!DATEIEN[@]}"; do
-           [ $i -gt 0 ] && mv -- "${DATEIEN[$i]}" "$ZIEL/Duplikate/" 2>/dev/null |&nbsp;|&nbsp;v8.1
-             && echo -e "${GELB}Verschoben: ${DATEIEN[$i]##*/}${RESET}" |&nbsp;|&nbsp;v8.1
+           [ $i -gt 0 ] && mv -- "${DATEIEN[$i]}" "$ZIEL/Duplikate/" 2>/dev/null \
+             && echo -e "${GELB}Verschoben: ${DATEIEN[$i]##*/}${RESET}" \
              || echo -e "${ROT}Fehler: ${DATEIEN[$i]}${RESET}"
          done ;;
       *) echo -e "${BLAU}Uebersprungen.${RESET}" ;;
     esac
     echo "--------------------------------------------"
   done
-  [ $DUPLIKAT_GRUPPEN -eq 0 ] |&nbsp;|&nbsp;v8.1
-    && echo -e "${GRUEN}Keine Duplikate gefunden!${RESET}" |&nbsp;|&nbsp;v8.1
+  [ $DUPLIKAT_GRUPPEN -eq 0 ] \
+    && echo -e "${GRUEN}Keine Duplikate gefunden!${RESET}" \
     || echo -e "${MAGENTA}$DUPLIKAT_GRUPPEN Gruppe(n) verarbeitet.${RESET}"
   exit 0
 fi
@@ -893,7 +893,7 @@ if $ZEIG_LOG; then
   [ ! -f "$LOGDATEI" ] && { echo -e "${ROT}Kein Log gefunden.${RESET}"; exit 1; }
   echo -e "${CYAN}── Log der letzten Sortierung ──${RESET}"
   ANZAHL=0
-  while IFS=$'|&nbsp;|&nbsp;v8.1t' read -r QUELLE ZIEL_DATEI DATUM; do
+  while IFS=$'\t' read -r QUELLE ZIEL_DATEI DATUM; do
     [ -z "$QUELLE" ] && continue
     # OPT: ${##*/} statt $(basename), $(dirname)
     QNAME="${QUELLE##*/}"
