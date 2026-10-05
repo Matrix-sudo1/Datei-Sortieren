@@ -869,6 +869,11 @@ watch_inotify() {
           esac
           ;;
       esac
+    else
+      READ_STATUS=$?
+      # EOF bedeutet, dass inotifywait beendet wurde; dann sauber auf
+      # den Polling-Fallback wechseln. Timeout (142) ist normal.
+      [ "$READ_STATUS" -eq 1 ] && break
     fi
 
     # Kurze Schreib-/Move-Bursts werden gesammelt und erst nach einer
