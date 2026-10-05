@@ -253,3 +253,10 @@ Jedes Ereignis enthält mindestens source, category, confidence, reason und die 
 Die freigegebenen Vorschläge werden als temporärer, NUL-delimitierter Plan an die bestehende Bash-Sortierengine übergeben. Die Engine prüft Quelle, Ziel und Dateisignatur erneut und schreibt erfolgreiche Moves in das bestehende Undo-Journal. Python enthält damit weiterhin keinen zweiten Datei-Move-Mechanismus.
 
 Die GUI verlangt vor dem intelligenten Sortieren eine ausdrückliche Bestätigung und sortiert ebenfalls nur die sicheren Vorschläge.
+
+
+## v9.0 Phase 6 – Interaktiver Intelligent-Sort-Workflow
+
+Die GUI zeigt intelligente Vorschläge jetzt als explizite Auswahlliste. Vorschläge mit hoher Konfidenz (**🟢 Sicher**) sind standardmäßig vorgewählt, mittlere Konfidenzen (**🟡 Prüfen**) können bewusst ausgewählt werden und niedrige Konfidenzen (**🔴 Nicht automatisch**) sind gesperrt.
+
+Vor der Ausführung erzeugt die API einen deterministischen Plan-Hash. Beim Sortieren werden die Auswahl, Klassifizierung und aktuellen Dateisignaturen erneut geprüft. Ein veralteter Plan wird abgelehnt. Dadurch bleibt die Benutzerentscheidung nachvollziehbar und die bestehende Bash-Sortierengine weiterhin die einzige Instanz für tatsächliche Dateioperationen.
