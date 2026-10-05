@@ -25,8 +25,33 @@ json_escape() {
   local STR="$1"
   STR="${STR//\\/\\\\}"
   STR="${STR//\"/\\\"}"
-  STR="${STR//
-
+  STR="${STR//$'\n'/\\n}"
+  STR="${STR//$'\r'/\\r}"
+  STR="${STR//$'\t'/\\t}"
+  printf '%s' "$STR"
+}
+json_event() {
+  $JSON_MODE || return 0
+  local TYPE="$1" SOURCE="" DESTINATION="" CATEGORY="" STATUS="" MESSAGE=""
+  shift
+  while [ $# -gt 1 ]; do
+    case "$1" in
+      source) SOURCE="$2" ;;
+      destination) DESTINATION="$2" ;;
+      category) CATEGORY="$2" ;;
+      status) STATUS="$2" ;;
+      message) MESSAGE="$2" ;;
+    esac
+    shift 2
+  done
+  printf '{"event":"%s"' "$(json_escape "$TYPE")"
+  [ -n "$SOURCE" ] && printf ',"source":"%s"' "$(json_escape "$SOURCE")"
+  [ -n "$DESTINATION" ] && printf ',"destination":"%s"' "$(json_escape "$DESTINATION")"
+  [ -n "$CATEGORY" ] && printf ',"category":"%s"' "$(json_escape "$CATEGORY")"
+  [ -n "$STATUS" ] && printf ',"status":"%s"' "$(json_escape "$STATUS")"
+  [ -n "$MESSAGE" ] && printf ',"message":"%s"' "$(json_escape "$MESSAGE")"
+  printf '}\n'
+}
 # --- Betriebssystem ---
 OS_TYP="linux"
 [[ "$OSTYPE" == "darwin"* ]] && OS_TYP="macos"
