@@ -10,6 +10,7 @@ import argparse
 import re
 import json
 import hashlib
+from datetime import datetime, timezone
 import os
 import subprocess
 import sys
@@ -325,6 +326,20 @@ def automation_profiles() -> list[dict]:
     return result
 
 
+def intelligent_report_path(folder: str) -> Path:
+    root = Path(folder).expanduser().resolve()
+    return root / ".datei-sortierer" / "intelligent-report.json"
+
+
+def write_intelligent_report(folder: str, report: dict) -> Path:
+    path = intelligent_report_path(folder)
+    path.parent.mkdir(mode=0o700, exist_ok=True)
+    tmp = path.with_name("." + path.name + "." + str(os.getpid()) + ".tmp")
+    tmp.write_text(json.dumps(report, ensure_ascii=False, indent=2), encoding="utf-8")
+    os.chmod(tmp, 0o600)
+    os.replace(tmp, path)
+    return path
+
 def intelligent_plan_hash(results: list[dict]) -> str:
     """Return a deterministic fingerprint for a freshly classified file set."""
     snapshot = []
@@ -440,7 +455,22 @@ def main() -> int:
             if ns.plan_hash and ns.plan_hash != plan_hash:
                 return json_response(False, 2, [{"event": "intelligent-sort", "status": "stale_plan", "message": "Intelligent plan is stale; please refresh the preview."}])
             if not ns.confirm:
-                return json_response(True, 0, [{"event": "intelligent-sort", "status": "confirmation_required", "eligible": len(eligible), "review": sum(1 for r in results if r.get("decision") == "review"), "leave": sum(1 for r in results if r.get("decision") == "leave"), "message": "Explicit confirmation required; no files changed."}])
+                report = {
+                    "version": 1,
+                    "mode": "intelligent-sort-preview",
+                    "created_at": datetime.now(timezone.utc).isoformat(),
+                    "folder": str(Path(ns.folder).expanduser().resolve()),
+                    "plan_hash": plan_hash,
+                    "summary": {
+                        "total": len(results),
+                        "auto": sum(1 for r in results if r.get("decision") == "auto"),
+                        "review": sum(1 for r in results if r.get("decision") == "review"),
+                        "leave": sum(1 for r in results if r.get("decision") == "leave"),
+                    },
+                    "files": results,
+                }
+                report_path = write_intelligent_report(ns.folder, report)
+                return json_response(True, 0, [{"event": "intelligent-sort", "status": "confirmation_required", "eligible": len(eligible), "review": sum(1 for r in results if r.get("decision") == "review"), "leave": sum(1 for r in results if r.get("decision") == "leave"), "report": str(report_path), "message": "Explicit confirmation required; no files changed."}])
             if ns.select:
                 selected = {str(Path(value).expanduser().resolve()) for value in ns.select}
                 eligible_by_source = {str(Path(item["source"]).expanduser().resolve()): item for item in eligible}
@@ -469,7 +499,25 @@ def main() -> int:
                 engine_args = [str(root), "--intelligent-plan", plan_name]
                 if ns.recursive:
                     engine_args.append("--unterordner")
-                return run_engine(engine_args)
+                rc = run_engine(engine_args)
+                report = {
+                    "version": 1,
+                    "mode": "intelligent-sort",
+                    "created_at": datetime.now(timezone.utc).isoformat(),
+                    "folder": str(root),
+                    "plan_hash": plan_hash,
+                    "selection": [str(Path(item["source"]).expanduser().resolve()) for item in eligible],
+                    "summary": {
+                        "selected": len(eligible),
+                        "auto": sum(1 for item in eligible if item.get("decision") == "auto"),
+                        "review": sum(1 for item in eligible if item.get("decision") == "review"),
+                        "leave": sum(1 for item in results if item.get("decision") == "leave"),
+                        "engine_exit_code": rc,
+                    },
+                    "classification": results,
+                }
+                write_intelligent_report(ns.folder, report)
+                return rc
             finally:
                 try:
                     os.unlink(plan_name)
