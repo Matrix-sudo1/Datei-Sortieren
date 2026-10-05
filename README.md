@@ -1,6 +1,6 @@
 # 📂 Datei-Sortierer
 
-Ein Bash-basierter Datei-Sortierer mit optionaler Tkinter-GUI. Version **v8.1** konzentriert sich auf Stabilität, sichere Pfadbehandlung, reproduzierbare Tests und eine gemeinsame Sortier-Engine für CLI und GUI.
+Ein Bash-basierter Datei-Sortierer mit optionaler Tkinter-GUI. Version **v8.2** konzentriert sich auf Stabilität, sichere Pfadbehandlung, reproduzierbare Tests und eine gemeinsame Sortier-Engine für CLI und GUI.
 
 ## Kernfunktionen
 
@@ -63,6 +63,21 @@ Kategorien werden validiert, damit keine absoluten Pfade, Pfadtrenner oder ander
 
 Die mitgelieferten Profile verwenden dasselbe Format und werden von der Bash-Engine direkt geladen.
 
+## JSON-API
+
+v8.2 ergänzt einen stabilen Maschinenzugang über `api.py`. Die API verwendet die Bash-Engine weiterhin als einzige Sortierlogik und liefert eine zusammengefasste JSON-Antwort mit strukturierten Ereignissen.
+
+Beispiele:
+
+```bash
+python3 api.py preview ~/Downloads
+python3 api.py sort ~/Downloads --recursive
+python3 api.py undo ~/Downloads
+python3 api.py log ~/Downloads
+```
+
+Intern nutzt die Engine optionale **NDJSON-Ereignisse** (`--json`). Dadurch muss die GUI keine menschenlesbare CLI-Ausgabe mehr parsen. JSON Lines eignet sich besonders für zeilenweise verarbeitbare Ereignisse und Streaming-Schnittstellen. citeturn1search0
+
 ## GUI
 
 ```bash
@@ -122,7 +137,7 @@ Der Testumfang umfasst aktuell:
 - rekursive Sortierung
 - Schutz gegen erneute Verarbeitung erzeugter Zielordner
 
-Weitere Tests für Sonderzeichen, Undo, Symlinks, Watch und Duplikate werden als nächste Testausbaustufe ergänzt.
+Zusätzlich werden die JSON-API, Sonderzeichen im Journal und der NUL-delimitierte Log-Reader regressionsgeprüft.
 
 ## Projektstruktur
 
@@ -130,6 +145,7 @@ Weitere Tests für Sonderzeichen, Undo, Symlinks, Watch und Duplikate werden als
 Datei-Sortierer/
 ├── datei_sortieren.sh
 ├── gui.py
+├── api.py
 ├── config.txt
 ├── ignore.txt
 ├── profile/
