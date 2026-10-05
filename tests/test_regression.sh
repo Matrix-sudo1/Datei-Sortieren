@@ -146,6 +146,7 @@ grep -q 'self._api_aktion(["log", self.ordner_pfad.get()]' "$ROOT/gui.py" || fai
 grep -q 'p.add_argument("--notify", action="store_true")' "$ROOT/api.py" || fail "API-Notify fehlt"
 
 echo "[12/12] Konfigurations-API und GUI-Editor"
+set -x
 mkdir -p "$TMP/config"
 cat > "$TMP/config/custom.txt" <<'CFG'
 # custom
