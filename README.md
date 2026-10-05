@@ -1,6 +1,6 @@
 # 📂 Datei-Sortierer
 
-Ein Bash-basierter Datei-Sortierer mit optionaler Tkinter-GUI. Version **v8.0** konzentriert sich auf Stabilität, sichere Pfadbehandlung, reproduzierbare Tests und eine gemeinsame Sortier-Engine für CLI und GUI.
+Ein Bash-basierter Datei-Sortierer mit optionaler Tkinter-GUI. Version **v8.1** konzentriert sich auf Stabilität, sichere Pfadbehandlung, reproduzierbare Tests und eine gemeinsame Sortier-Engine für CLI und GUI.
 
 ## Kernfunktionen
 
