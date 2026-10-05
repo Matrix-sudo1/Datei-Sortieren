@@ -189,4 +189,30 @@ SYMLINK_SAVE=$(python3 "$ROOT/api.py" config-save "$TMP/config-symlink/link.txt"
 printf '%s' "$SYMLINK_SAVE" | python3 -c 'import json,sys; p=json.load(sys.stdin); assert not p["success"] and p["exit_code"] == 2, p'
 grep -q 'Bilder=jpg' "$TMP/config-symlink/real.txt" || fail "Symlink-Ziel wurde beim Config-Save veraendert"
 
-echo "PASS: v8.7 security and reliability tests"
+
+
+echo "[15/15] v8.8 Profile-API"
+PROFILE_OUTPUT=$(python3 "$ROOT/api.py" profiles)
+printf '%s' "$PROFILE_OUTPUT" | python3 -c 'import json,sys; p=json.load(sys.stdin); assert p["success"], p; names={e["profile"] for e in p["events"]}; assert {"fotos","buero","entwickler"} <= names, p'
+
+echo "[16/16] v8.8 Automation Lifecycle"
+mkdir -p "$TMP/automation"
+AUTO_START=$(python3 "$ROOT/api.py" automation-start "$TMP/automation" --interval 1)
+printf '%s' "$AUTO_START" | python3 -c 'import json,sys; p=json.load(sys.stdin); assert p["success"], p; assert p["events"][0]["status"] == "running", p'
+AUTO_STATUS=$(python3 "$ROOT/api.py" automation-status "$TMP/automation")
+printf '%s' "$AUTO_STATUS" | python3 -c 'import json,sys; p=json.load(sys.stdin); assert p["success"], p; assert p["events"][0]["status"] == "running", p'
+AUTO_PAUSE=$(python3 "$ROOT/api.py" automation-pause "$TMP/automation")
+printf '%s' "$AUTO_PAUSE" | python3 -c 'import json,sys; p=json.load(sys.stdin); assert p["success"], p; assert p["events"][0]["status"] == "paused", p'
+AUTO_RESUME=$(python3 "$ROOT/api.py" automation-resume "$TMP/automation")
+printf '%s' "$AUTO_RESUME" | python3 -c 'import json,sys; p=json.load(sys.stdin); assert p["success"], p; assert p["events"][0]["status"] == "running", p'
+sleep 2
+printf 'automation' > "$TMP/automation/test.txt"
+for _ in 1 2 3 4 5 6; do
+  [ -f "$TMP/automation/Dokumente/test.txt" ] && break
+  sleep 1
+done
+assert_file "$TMP/automation/Dokumente/test.txt"
+AUTO_STOP=$(python3 "$ROOT/api.py" automation-stop "$TMP/automation")
+printf '%s' "$AUTO_STOP" | python3 -c 'import json,sys; p=json.load(sys.stdin); assert p["success"] and p["events"][0]["status"] == "stopped", p'
+
+echo "PASS: v8.8 automation tests"

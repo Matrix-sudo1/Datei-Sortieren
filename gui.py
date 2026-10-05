@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # ============================================
-#  Datei-Sortierer GUI v8.6
+#  Datei-Sortierer GUI v8.8
 #  NEU:
 #  - Drag & Drop (Ordner ins Fenster ziehen)
 #  - Dark / Light Theme Umschalter
@@ -128,7 +128,7 @@ def _parse_drop(data):
 class DateiSortiererApp:
     def __init__(self, root):
         self.root = root
-        self.root.title("Datei-Sortierer v8.6")
+        self.root.title("Datei-Sortierer v8.8")
         self.root.geometry("900x780")
         self.root.minsize(800, 660)
         self.root.resizable(True, True)
@@ -150,6 +150,7 @@ class DateiSortiererApp:
         self._vorschau_lock   = threading.Lock()
         self._log_zeilen      = 0   # Instanz-Variable (nicht Klassen-Variable!)
         self._last_kat_count  = {}  # für Theme-Wechsel: Statistiken neu rendern
+        self._automation_status_data = {}
 
         self.script_pfad = self._finde_script()
         self.api_pfad    = str(Path(__file__).parent / "api.py")
@@ -440,6 +441,7 @@ class DateiSortiererApp:
         self._baue_tab_verlauf()
         self._baue_tab_cronjob()
         self._baue_tab_config()
+        self._baue_tab_automation()
 
         self._tab_wechseln("sortieren")
         self._baue_statusbar(aussen)
@@ -502,7 +504,8 @@ class DateiSortiererApp:
                 ("statistiken", "📊  Statistiken"),
                 ("verlauf",     "🕐  Verlauf"),
                 ("cronjob",     "⏰  Geplant"),
-                ("config",      "⚙  Konfiguration")]
+                ("config",      "⚙  Konfiguration"),
+                ("automation", "🤖  Automation")]
         for key, label in tabs:
             btn = tk.Button(
                 self.tab_rahmen, text=label, font=FONT_TAB,
@@ -522,13 +525,14 @@ class DateiSortiererApp:
                     bg=F["tab_aktiv"] if k == key else F["nav"],
                     fg=F["text"] if k == key else F["text_dim"])
             for frame in [self.frame_sortieren, self.frame_statistiken,
-                          self.frame_verlauf, self.frame_cronjob, self.frame_config]:
+                          self.frame_verlauf, self.frame_cronjob, self.frame_config, self.frame_automation]:
                 frame.pack_forget()
             {"sortieren":   self.frame_sortieren,
              "statistiken": self.frame_statistiken,
              "verlauf":     self.frame_verlauf,
              "cronjob":     self.frame_cronjob,
-             "config":      self.frame_config}[key].pack(fill="both", expand=True)
+             "config":      self.frame_config,
+             "automation": self.frame_automation}[key].pack(fill="both", expand=True)
         except tk.TclError:
             pass
 
@@ -928,6 +932,70 @@ class DateiSortiererApp:
             self.config_status.configure(text=f"❌ {exc}", fg=self._F["rot"])
 
     # ------------------------------------------
+    #  TAB: AUTOMATION
+    # ------------------------------------------
+    def _baue_tab_automation(self):
+        F = self._F
+        self.frame_automation = tk.Frame(self.tab_inhalt, bg=F["card"])
+        self._reg(self.frame_automation, "card")
+
+        tk.Label(self.frame_automation, text="🤖  Watch-Automation",
+                 font=FONT_TITEL, bg=F["card"], fg=F["text"]).pack(anchor="w", pady=(10, 4))
+        tk.Label(self.frame_automation,
+                 text="Automatische Dateisortierung im Hintergrund – gesteuert über die JSON-API.",
+                 font=FONT, bg=F["card"], fg=F["text_dim"]).pack(anchor="w", pady=(0, 14))
+
+        self.automation_status_lbl = tk.Label(
+            self.frame_automation, text="Status: unbekannt",
+            font=FONT_BOLD, bg=F["card2"], fg=F["text"], anchor="w", padx=14, pady=12)
+        self.automation_status_lbl.pack(fill="x", pady=(0, 10))
+
+        controls = tk.Frame(self.frame_automation, bg=F["card"])
+        controls.pack(fill="x", pady=4)
+        self._reg(controls, "card")
+
+        for text, command in [
+            ("▶  Start", lambda: self._automation_action("automation-start")),
+            ("⏸  Pause", lambda: self._automation_action("automation-pause")),
+            ("▶  Fortsetzen", lambda: self._automation_action("automation-resume")),
+            ("■  Stop", lambda: self._automation_action("automation-stop")),
+            ("↻  Status", lambda: self._automation_status()),
+        ]:
+            tk.Button(controls, text=text, font=FONT_BTN, bg=F["akzent2"],
+                      fg=F["btn_text"], relief="flat", cursor="hand2",
+                      padx=10, pady=10, command=command).pack(side="left", padx=(0, 6))
+
+        self.automation_hint = tk.Label(
+            self.frame_automation,
+            text="Start verwendet den aktuell ausgewählten Ordner und die Sortieroptionen.",
+            font=FONT_KLEIN, bg=F["card"], fg=F["text_dim"], anchor="w")
+        self.automation_hint.pack(fill="x", pady=(10, 0))
+
+    def _automation_status(self):
+        if not self.ordner_pfad.get() or not os.path.isdir(self.ordner_pfad.get()):
+            self.automation_status_lbl.configure(text="Status: bitte zuerst einen Ordner auswählen.")
+            return
+        self._api_aktion(["automation-status", self.ordner_pfad.get()], "AUTOMATION STATUS",
+                         callback=self._automation_status_update)
+
+    def _automation_status_update(self):
+        self._api_aktion(["automation-status", self.ordner_pfad.get()], "AUTOMATION STATUS")
+
+    def _automation_action(self, action):
+        if not self.ordner_pfad.get() or not os.path.isdir(self.ordner_pfad.get()):
+            messagebox.showwarning("Kein Ordner", "Bitte zuerst einen Ordner auswählen.")
+            return
+        if action == "automation-start":
+            args = [action, self.ordner_pfad.get()]
+            if self.unterordner_var.get(): args.append("--recursive")
+            if self.kopieren_var.get(): args.append("--copy")
+            if self.notify_var.get(): args.append("--notify")
+            self._api_aktion(args, "AUTOMATION START", callback=self._automation_status)
+        else:
+            self._api_aktion([action, self.ordner_pfad.get()], f"AUTOMATION {action.split('-')[-1].upper()}",
+                             callback=self._automation_status)
+
+    # ------------------------------------------
     #  TAB: CRONJOB (Geplante Sortierung)
     # ------------------------------------------
     def _baue_tab_cronjob(self):
@@ -1284,6 +1352,11 @@ class DateiSortiererApp:
                            else "rot" if status == "error" or event_type == "error"
                            else None)
                     self._nach(self._verlauf_schreiben, f"  {line}\n", tag)
+                    if event_type == "automation" and hasattr(self, "automation_status_lbl"):
+                        status_value = event.get("status", "unknown")
+                        pid = event.get("pid")
+                        label = f"Status: {status_value}" + (f"  (PID {pid})" if pid else "")
+                        self._nach(self.automation_status_lbl.configure, text=label)
                 if not payload.get("success", False):
                     error = next((e.get("message", "API-Fehler") for e in payload.get("events", [])
                                   if e.get("event") == "error"), "API-Fehler")
