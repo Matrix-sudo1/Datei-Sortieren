@@ -215,4 +215,29 @@ assert_file "$TMP/automation/Dokumente/test.txt"
 AUTO_STOP=$(python3 "$ROOT/api.py" automation-stop "$TMP/automation")
 printf '%s' "$AUTO_STOP" | python3 -c 'import json,sys; p=json.load(sys.stdin); assert p["success"] and p["events"][0]["status"] == "stopped", p'
 
-echo "PASS: v8.8 automation tests"
+
+echo "[17/17] v9.0 Deterministische Intelligent-Sorting-Klassifizierung"
+mkdir -p "$TMP/intelligent"
+printf 'jpg' > "$TMP/intelligent/foto.jpg"
+printf 'pdf' > "$TMP/intelligent/rechnung.pdf"
+printf 'unknown' > "$TMP/intelligent/project_notes.zzz"
+printf 'unknown' > "$TMP/intelligent/mystery.zzz"
+INTELLIGENT_OUTPUT=$(python3 "$ROOT/api.py" intelligent-preview "$TMP/intelligent")
+printf '%s' "$INTELLIGENT_OUTPUT" | python3 -c '
+import json,sys
+p=json.load(sys.stdin)
+assert p["success"], p
+events=[e for e in p["events"] if e["event"]=="intelligent"]
+assert len(events)==4, p
+by_name={e["source"].split("/")[-1]:e for e in events}
+assert by_name["foto.jpg"]["category"]=="Bilder" and by_name["foto.jpg"]["confidence"]==1.0, p
+assert by_name["rechnung.pdf"]["category"]=="Dokumente" and by_name["rechnung.pdf"]["signal"]=="extension", p
+assert by_name["project_notes.zzz"]["category"]=="Code" and by_name["project_notes.zzz"]["signal"]=="filename", p
+assert by_name["mystery.zzz"]["category"]=="Sonstiges" and by_name["mystery.zzz"]["confidence"]==0.0, p
+'
+before=$(find "$TMP/intelligent" -type f -print | sort | sha256sum)
+python3 "$ROOT/api.py" intelligent-preview "$TMP/intelligent" >/dev/null
+after=$(find "$TMP/intelligent" -type f -print | sort | sha256sum)
+[ "$before" = "$after" ] || fail "Intelligent Preview hat Dateien veraendert"
+
+echo "PASS: v9.0 intelligent sorting tests"
