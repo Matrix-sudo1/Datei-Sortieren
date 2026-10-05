@@ -321,7 +321,7 @@ echo "[24/24] v9.0 Intelligent GUI Selection"
 grep -Fq 'self._intelligent_rows = []' "$ROOT/gui.py" || fail "GUI selection state fehlt"
 grep -Fq 'self._intelligent_plan_hash = None' "$ROOT/gui.py" || fail "GUI plan hash state fehlt"
 grep -Fq -- '--select' "$ROOT/gui.py" || fail "GUI übergibt Auswahl nicht"
-grep -Fq '--plan-hash' "$ROOT/gui.py" || fail "GUI übergibt Plan-Hash nicht"
+grep -Fq -- '--plan-hash' "$ROOT/gui.py" || fail "GUI übergibt Plan-Hash nicht"
 grep -Fq 'state="disabled"' "$ROOT/gui.py" || fail "GUI Leave-Auswahl ist nicht gesperrt"
 grep -Fq 'decision == "auto"' "$ROOT/gui.py" || fail "GUI Auto-Vorauswahl fehlt"
 
