@@ -8,7 +8,7 @@
 # ============================================
 
 import tkinter as tk
-from tkinter import filedialog, messagebox
+from tkinter import filedialog, messagebox, simpledialog
 import subprocess, threading, os, shutil, platform, re, json, sys
 from pathlib import Path
 
@@ -1328,6 +1328,7 @@ class DateiSortiererApp:
                         "decision": decision,
                         "label": decision_label,
                         "reason": event.get("reason", ""),
+                        "signal": event.get("signal", ""),
                         "selected": decision == "auto",
                     })
                 if not payload.get("success", False):
@@ -1405,6 +1406,58 @@ class DateiSortiererApp:
             args.extend(["--select", source])
         self._api_aktion(args, "INTELLIGENT SORTIEREN", callback=self._intelligent_vorschau)
 
+    def _learning_rule_uebernehmen(self, row):
+        """Übernimmt eine bestätigte Korrektur als explizite lokale Lernregel."""
+        pfad = self.ordner_pfad.get()
+        if not pfad:
+            return
+        signal = row.get("signal", "")
+        if signal == "extension":
+            source = "extension"
+            pattern = Path(row["name"]).suffix.lower().lstrip(".")
+        elif signal == "mime":
+            source = "mime"
+            match = re.search(r"MIME type ([^ ]+)", row.get("reason", ""))
+            pattern = match.group(1) if match else ""
+        else:
+            source = "filename_token"
+            tokens = re.findall(r"[A-Za-z0-9]+", Path(row["name"]).stem.lower())
+            pattern = tokens[0] if tokens else ""
+        if not pattern:
+            messagebox.showerror("Lernregel", "Für diese Klassifizierung konnte kein eindeutiges Muster ermittelt werden.")
+            return
+        category = simpledialog.askstring(
+            "Lernregel übernehmen",
+            f"Welche Kategorie soll künftig für {source} '{pattern}' verwendet werden?",
+            initialvalue=row.get("category", "Sonstiges"))
+        if not category:
+            return
+        category = category.strip()
+        if not category:
+            return
+        rule_id = f"{source}-{pattern.lower()}-{category.lower()}".replace(" ", "-")
+        args = [
+            sys.executable, self.api_pfad, "intelligent-rule-add", pfad,
+            "--source", source, "--pattern", pattern, "--category", category,
+            "--id", rule_id,
+        ]
+        try:
+            proc = subprocess.run(
+                args, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+                text=True, encoding="utf-8", errors="replace", check=False)
+            payload = json.loads(proc.stdout)
+            if proc.returncode != 0 or not payload.get("success"):
+                msg = "; ".join(e.get("message", "Lernregel fehlgeschlagen.") for e in payload.get("events", []))
+                messagebox.showerror("Lernregel", msg)
+                return
+            messagebox.showinfo(
+                "Lernregel gespeichert",
+                f"Regel gespeichert: {source} '{pattern}' → {category}\n\n"
+                "Die Regel wird bei künftigen Intelligent-Previews zuerst angewendet.")
+            self._intelligent_vorschau()
+        except Exception as exc:
+            messagebox.showerror("Lernregel", f"Lernregel fehlgeschlagen: {exc}")
+
     def _intelligent_zeile(self, row, i):
         F = self._F
         try:
@@ -1431,6 +1484,12 @@ class DateiSortiererApp:
             ]:
                 tk.Label(zeile, text=text, font=FONT, bg=bg, fg=F["text"],
                          width=breite, anchor="w", padx=8, pady=6).pack(side="left")
+            if decision != "leave":
+                tk.Button(
+                    zeile, text="Als Regel übernehmen", font=FONT_KLEIN,
+                    bg=F["akzent2"], fg=F["btn_text"], relief="flat",
+                    command=lambda r=row: self._learning_rule_uebernehmen(r)
+                ).pack(side="right", padx=6, pady=4)
         except tk.TclError:
             pass
 
