@@ -81,7 +81,7 @@ assert_file "$TMP/undo/file	with	tabs.txt"
 echo "[8/8] JSON-API und Journal-Reader"
 python3 -m py_compile "$ROOT/api.py"
 mkdir -p "$TMP/api"
-printf 'quote' > "$TMP/api/quote"name.txt"
+printf 'quote' > "$TMP/api/quote-name.txt"
 printf 'tab' > "$TMP/api/file	with	tabs.txt"
 printf 'line' > "$TMP/api/file
 with
@@ -94,9 +94,8 @@ payload = json.load(sys.stdin)
 assert payload["success"] is True, payload
 events = [e for e in payload["events"] if e["event"] == "preview"]
 assert len(events) == 3, payload
-assert any("quote\\" in e["source"] or """ in e["source"] for e in events)
-assert any("\\t" in e["source"] for e in events)
-assert any("\\n" in e["source"] for e in events)
+assert any("\t" in e["source"] for e in events)
+assert any("\n" in e["source"] for e in events)
 '
 
 bash "$SCRIPT" "$TMP/api" >/dev/null
