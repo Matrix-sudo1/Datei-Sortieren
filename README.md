@@ -260,3 +260,8 @@ Die GUI verlangt vor dem intelligenten Sortieren eine ausdrückliche Bestätigun
 Die GUI zeigt intelligente Vorschläge jetzt als explizite Auswahlliste. Vorschläge mit hoher Konfidenz (**🟢 Sicher**) sind standardmäßig vorgewählt, mittlere Konfidenzen (**🟡 Prüfen**) können bewusst ausgewählt werden und niedrige Konfidenzen (**🔴 Nicht automatisch**) sind gesperrt.
 
 Vor der Ausführung erzeugt die API einen deterministischen Plan-Hash. Beim Sortieren werden die Auswahl, Klassifizierung und aktuellen Dateisignaturen erneut geprüft. Ein veralteter Plan wird abgelehnt. Dadurch bleibt die Benutzerentscheidung nachvollziehbar und die bestehende Bash-Sortierengine weiterhin die einzige Instanz für tatsächliche Dateioperationen.
+
+
+## v9.0 Phase 7 – Intelligent Sort Reports
+
+Intelligent Sort schreibt zusätzlich einen strukturierten Bericht unter `.datei-sortierer/intelligent-report.json`. Der Bericht enthält Plan-Hash, Zeitstempel, Klassifizierungen, Auswahl und Engine-Ergebnis. Der Bericht wird atomar geschrieben und mit restriktiven Dateirechten angelegt. Auch ein reiner Confirmation-Preview erzeugt einen Bericht, ohne Dateien zu verändern.
