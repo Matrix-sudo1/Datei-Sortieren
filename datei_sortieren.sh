@@ -638,6 +638,14 @@ sortiere_ordner() {
   echo "--------------------------------------------"
 
   if $UNTERORDNER; then
+    # Snapshot der Quellen erstellen, damit neu angelegte Zielverzeichnisse
+    # nicht waehrend desselben Laufs erneut verarbeitet werden.
+    local SNAPSHOT
+    SNAPSHOT=$(mktemp 2>/dev/null) || {
+      echo -e "${ROT}Fehler: Snapshot-Datei konnte nicht erstellt werden.${RESET}"
+      return 1
+    }
+    find "$ORDNER" -type f -not -name ".sortier_log.txt" -print0 > "$SNAPSHOT" 2>/dev/null
     while IFS= read -r -d '' DATEI; do
       local DATEINAME="${DATEI##*/}"
       [ "$DATEINAME" = ".sortier_log.txt" ] && continue
@@ -650,7 +658,8 @@ sortiere_ordner() {
         2) IGNORIERT=$((IGNORIERT+1)); BERICHT_IGNORIERT=$((BERICHT_IGNORIERT+1)) ;;
         3) FEHLER_ANZ=$((FEHLER_ANZ+1)); BERICHT_FEHLER=$((BERICHT_FEHLER+1)) ;;
       esac
-    # Snapshot der Quellen erstellen, damit neu angelegte Zielverzeichnisse\n    # nicht waehrend desselben Laufs erneut verarbeitet werden.\n    local SNAPSHOT\n    SNAPSHOT=$(mktemp 2>/dev/null) || {\n      echo -e "${ROT}Fehler: Snapshot-Datei konnte nicht erstellt werden.${RESET}"\n      return 1\n    }\n    find "$ORDNER" -type f -not -name ".sortier_log.txt" -print0 > "$SNAPSHOT" 2>/dev/null\n    while IFS= read -r -d '' DATEI; do\n      local DATEINAME="${DATEI##*/}"\n      [ "$DATEINAME" = ".sortier_log.txt" ] && continue\n      local RET\n      sortiere_datei "$DATEI" "$ORDNER" "$DRYRUN" "$LOGDATEI" "$NACH_DATUM" "$DATUM_LOG"\n      RET=$?\n      case $RET in\n        0) VERSCHOBEN=$((VERSCHOBEN+1)); BERICHT_VERSCHOBEN=$((BERICHT_VERSCHOBEN+1)) ;;\n        1) SONSTIGES=$((SONSTIGES+1)) ;;\n        2) IGNORIERT=$((IGNORIERT+1)); BERICHT_IGNORIERT=$((BERICHT_IGNORIERT+1)) ;;\n        3) FEHLER_ANZ=$((FEHLER_ANZ+1)); BERICHT_FEHLER=$((BERICHT_FEHLER+1)) ;;\n      esac\n    done < "$SNAPSHOT"\n    rm -f "$SNAPSHOT"
+    done < "$SNAPSHOT"
+    rm -f "$SNAPSHOT"
   else
     shopt -s nullglob
     for DATEI in "$ORDNER"/*; do
