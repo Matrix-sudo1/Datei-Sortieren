@@ -684,8 +684,14 @@ sortiere_ordner() {
     [ $FEHLER_ANZ -gt 0 ] && echo -e "${ROT}Fehler: $FEHLER_ANZ${RESET}"
     echo -e "${GELB}Tipps: --undo | --log | --watch | --bericht${RESET}"
     # Bericht nur im Einzel-Modus hier; Multi-Modus ruft bericht_schreiben separat auf
-    $BERICHT && ! $MULTI_MODUS && bericht_schreiben "$ORDNER"
+    if $BERICHT && ! $MULTI_MODUS; then
+      bericht_schreiben "$ORDNER"
+    fi
   fi
+
+  # Expliziter Funktionsstatus: Sonstiges/ignorierte Dateien sind kein Fehler.
+  [ "$FEHLER_ANZ" -gt 0 ] && return 1
+  return 0
 }
 
 # ============================================
