@@ -1,6 +1,6 @@
 #!/bin/bash
 # ============================================
-#  Datei-Sortierer v8.2
+#  Datei-Sortierer v8.4
 #  Optimierungen gegenüber v7.0:
 #  - $(basename) → ${f##*/}  (84x schneller)
 #  - $(tr lower) → ${v,,}    (47x schneller)
@@ -19,7 +19,7 @@ fi
 ROT='\033[0;31m'; GRUEN='\033[0;32m'; GELB='\033[1;33m'
 BLAU='\033[0;34m'; CYAN='\033[0;36m'; MAGENTA='\033[0;35m'; RESET='\033[0m'
 
-# v8.2: optionale maschinenlesbare NDJSON-Ereignisse fuer GUI/API.
+# v8.4: optionale maschinenlesbare NDJSON-Ereignisse fuer GUI/API.
 JSON_MODE=false
 json_escape() {
   local STR="$1"
