@@ -1300,10 +1300,19 @@ class DateiSortiererApp:
                     if event.get("event") != "intelligent":
                         continue
                     source = event.get("source", "")
+                    confidence = float(event.get("confidence", 0.0))
+                    decision = event.get("decision", "leave")
+                    band = event.get("confidence_band", "low")
+                    decision_label = {
+                        "auto": "🟢 Sicher",
+                        "review": "🟡 Prüfen",
+                        "leave": "🔴 Nicht automatisch",
+                    }.get(decision, f"⚪ {band}")
                     rows.append((
                         Path(source).name,
                         event.get("category", "Sonstiges"),
-                        f"{float(event.get('confidence', 0.0)):.0%}",
+                        f"{confidence:.0%}",
+                        decision_label,
                         event.get("reason", "")
                     ))
                 if not payload.get("success", False):
@@ -1333,9 +1342,11 @@ class DateiSortiererApp:
                     else:
                         for i, row in enumerate(rows):
                             self._intelligent_zeile(*row, i)
-                        high = sum(1 for r in rows if float(r[2].strip("%")) >= 85)
+                        auto_count = sum(1 for r in rows if r[3].startswith("🟢"))
+                        review_count = sum(1 for r in rows if r[3].startswith("🟡"))
+                        leave_count = sum(1 for r in rows if r[3].startswith("🔴"))
                         self.status_text.configure(
-                            text=f"🧠  {len(rows)} Datei(en) analysiert – {high} mit hoher Konfidenz.",
+                            text=f"🧠  {len(rows)} analysiert – 🟢 {auto_count} sicher · 🟡 {review_count} prüfen · 🔴 {leave_count} nicht automatisch.",
                             fg=self._F["gruen"])
                     self.intelligent_btn.configure(state="normal")
                 except tk.TclError:
@@ -1344,14 +1355,14 @@ class DateiSortiererApp:
 
         threading.Thread(target=_t, daemon=True).start()
 
-    def _intelligent_zeile(self, dateiname, kategorie, konfidenz, grund, i):
+    def _intelligent_zeile(self, dateiname, kategorie, konfidenz, entscheidung, grund, i):
         F = self._F
         try:
             bg = F["tabelle_z1"] if i % 2 == 0 else F["tabelle_z2"]
             zeile = tk.Frame(self.tabelle_frame, bg=bg)
             zeile.pack(fill="x")
             for text, breite in [
-                (dateiname, 22), (kategorie, 16), (konfidenz, 10), (grund, 48)
+                (dateiname, 22), (kategorie, 16), (konfidenz, 10), (entscheidung, 18), (grund, 44)
             ]:
                 tk.Label(zeile, text=text, font=FONT, bg=bg, fg=F["text"],
                          width=breite, anchor="w", padx=8, pady=6).pack(side="left")
