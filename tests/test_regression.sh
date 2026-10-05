@@ -10,12 +10,12 @@ fail() { echo "FAIL: $*" >&2; exit 1; }
 assert_file() { [ -f "$1" ] || fail "Datei fehlt: $1"; }
 assert_not_file() { [ ! -f "$1" ] || fail "Datei unerwartet vorhanden: $1"; }
 
-echo "[1/8] Bash-Syntax"
+echo "[1/10] Bash- und Python-Syntax"
 bash -n "$SCRIPT"
-python3 -m py_compile "$ROOT/gui.py"
+python3 -m py_compile "$ROOT/gui.py" "$ROOT/api.py"
 rm -rf "$ROOT/__pycache__"
 
-echo "[2/8] Standard-Sortierung"
+echo "[2/10] Standard-Sortierung"
 mkdir -p "$TMP/basic"
 printf 'bild' > "$TMP/basic/foto.jpg"
 printf 'text' > "$TMP/basic/notiz.txt"
@@ -24,7 +24,7 @@ assert_file "$TMP/basic/Bilder/foto.jpg"
 assert_file "$TMP/basic/Dokumente/notiz.txt"
 assert_not_file "$TMP/basic/foto.jpg"
 
-echo "[3/8] Profile"
+echo "[3/10] Profile"
 mkdir -p "$TMP/profiles"
 printf 'foto' > "$TMP/profiles/bild.png"
 bash "$SCRIPT" "$TMP/profiles" --profil fotos >/dev/null
@@ -40,14 +40,14 @@ printf 'code' > "$TMP/profiles-dev/app.py"
 bash "$SCRIPT" "$TMP/profiles-dev" --profil entwickler >/dev/null
 assert_file "$TMP/profiles-dev/Code/app.py"
 
-echo "[4/8] Rekursiver Snapshot"
+echo "[4/10] Rekursiver Snapshot"
 mkdir -p "$TMP/recursive/nested"
 printf 'code' > "$TMP/recursive/nested/tool.py"
 bash "$SCRIPT" "$TMP/recursive" --unterordner >/dev/null
 assert_file "$TMP/recursive/Code/tool.py"
 assert_not_file "$TMP/recursive/Code/Code/tool.py"
 
-echo "[5/8] Spezialnamen und Dry-Run"
+echo "[5/10] Spezialnamen und Dry-Run"
 mkdir -p "$TMP/special"
 printf "safe" > "$TMP/special/hello world.txt"
 printf "dry" > "$TMP/special/preview.pdf"
@@ -58,7 +58,7 @@ after=$(find "$TMP/special" -type f | sort | sha256sum)
 assert_file "$TMP/special/hello world.txt"
 assert_file "$TMP/special/preview.pdf"
 
-echo "[6/8] Symlink-Zielschutz"
+echo "[6/10] Symlink-Zielschutz"
 mkdir -p "$TMP/symlink-target" "$TMP/symlink"
 ln -s "$TMP/symlink-target" "$TMP/symlink/Bilder"
 printf "image" > "$TMP/symlink/photo.jpg"
@@ -66,7 +66,7 @@ bash "$SCRIPT" "$TMP/symlink" >/dev/null 2>&1 || true
 assert_file "$TMP/symlink/photo.jpg"
 
 
-echo "[7/8] Undo-Journal mit Sonderzeichen"
+echo "[7/10] Undo-Journal mit Sonderzeichen"
 mkdir -p "$TMP/undo"
 printf 'undo' > "$TMP/undo/file with spaces.txt"
 printf 'tab' > "$TMP/undo/file	with	tabs.txt"
@@ -80,7 +80,7 @@ fi
 assert_file "$TMP/undo/file with spaces.txt"
 assert_file "$TMP/undo/file	with	tabs.txt"
 
-echo "[8/8] JSON-API und Journal-Reader"
+echo "[8/10] JSON-API und Journal-Reader"
 python3 -m py_compile "$ROOT/api.py"
 mkdir -p "$TMP/api"
 printf 'quote' > "$TMP/api/quote-name.txt"
@@ -110,7 +110,7 @@ events = [e for e in payload["events"] if e["event"] == "log"]
 assert len(events) == 3, payload
 '
 
-echo "[9/9] Watch-Engine Struktur und Event-Fallback"
+echo "[10/10] Watch-Engine Struktur und Event-Fallback"
 grep -q 'watch_inotify()' "$SCRIPT" || fail "Watch-Engine fehlt"
 grep -q 'read -r -t 1 EVENT_PATH EVENT_TYPE' "$SCRIPT" || fail "Watch-Debounce fehlt"
 grep -q 'inotifywait -q -m -r' "$SCRIPT" || fail "Rekursiver inotify-Watcher fehlt"
@@ -132,4 +132,10 @@ chmod +x "$TMP/watch-bin/inotifywait"
 PATH="$TMP/watch-bin:$PATH" timeout 4 bash "$SCRIPT" "$TMP/watch" --watch >/dev/null 2>&1 || true
 assert_file "$TMP/watch/Dokumente/new.txt"
 
-echo "PASS: v8.3 Watch-Engine regression tests"
+echo "[9/10] JSON-API Fehler bleiben maschinenlesbar"
+INVALID_FOLDER_OUTPUT=$(python3 "$ROOT/api.py" preview "$TMP/does-not-exist")
+printf '%s' "$INVALID_FOLDER_OUTPUT" | python3 -c 'import json,sys; p=json.load(sys.stdin); assert p["success"] is False and p["exit_code"] == 2 and p["events"][0]["event"] == "error", p'
+INVALID_ARGS_OUTPUT=$(python3 "$ROOT/api.py" preview)
+printf '%s' "$INVALID_ARGS_OUTPUT" | python3 -c 'import json,sys; p=json.load(sys.stdin); assert p["success"] is False and p["exit_code"] == 2 and p["events"][0]["event"] == "error", p'
+
+echo "PASS: v8.4 hardening regression tests"
