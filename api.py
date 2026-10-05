@@ -401,6 +401,8 @@ def main() -> int:
         try:
             config_path = ns.config
             if ns.profile:
+                if not CATEGORY_RE.fullmatch(ns.profile):
+                    raise ValueError("invalid profile name")
                 config_path = str(ROOT / "profile" / f"{ns.profile}.txt")
             categories = load_categories(config_path or str(ROOT / "config.txt"))
             results = classify_folder(ns.folder, categories, ns.recursive)
