@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Stable JSON adapter for Datei-Sortierer v8.5.
+"""Stable JSON adapter for Datei-Sortierer v8.6.
 
 The Bash script remains the single source of truth for sorting behaviour.
 This module exposes structured JSON for GUI and automation clients.
@@ -16,6 +16,60 @@ from pathlib import Path
 API_VERSION = "1"
 ROOT = Path(__file__).resolve().parent
 ENGINE = ROOT / "datei_sortieren.sh"
+
+MAX_CONFIG_SIZE = 1024 * 1024
+CATEGORY_RE = __import__("re").compile(r"^[A-Za-z0-9_-]+$")
+EXT_RE = __import__("re").compile(r"^[A-Za-z0-9]+$")
+
+
+def read_config(path: str) -> tuple[list[dict], list[str]]:
+    file_path = Path(path).expanduser()
+    if not file_path.is_file():
+        raise ValueError(f"config not found: {file_path}")
+    if file_path.stat().st_size > MAX_CONFIG_SIZE:
+        raise ValueError("config file is too large")
+    categories = []
+    errors = []
+    text = file_path.read_text(encoding="utf-8")
+    for number, raw in enumerate(text.splitlines(), 1):
+        line = raw.strip()
+        if not line or line.startswith("#"):
+            continue
+        if "=" not in line:
+            errors.append(f"line {number}: missing '='")
+            continue
+        name, extensions = line.split("=", 1)
+        name = name.strip()
+        exts = extensions.split()
+        if not CATEGORY_RE.fullmatch(name) or name in {".", ".."}:
+            errors.append(f"line {number}: invalid category '{name}'")
+            continue
+        if not exts or any(not EXT_RE.fullmatch(ext) for ext in exts):
+            errors.append(f"line {number}: invalid extensions for '{name}'")
+            continue
+        categories.append({"category": name, "extensions": exts})
+    if not categories and not errors:
+        errors.append("config contains no categories")
+    return categories, errors
+
+
+def save_config(path: str, content: str) -> tuple[list[dict], list[str]]:
+    if len(content.encode("utf-8")) > MAX_CONFIG_SIZE:
+        raise ValueError("config content is too large")
+    target = Path(path).expanduser()
+    tmp = target.with_name(target.name + ".tmp")
+    tmp.write_text(content, encoding="utf-8")
+    try:
+        categories, errors = read_config(str(tmp))
+        if errors:
+            return categories, errors
+        os.replace(tmp, target)
+        return categories, []
+    finally:
+        try:
+            tmp.unlink()
+        except FileNotFoundError:
+            pass
 
 
 class JsonArgumentParser(argparse.ArgumentParser):
@@ -113,6 +167,13 @@ def build_parser() -> argparse.ArgumentParser:
 
     log = sub.add_parser("log", help="read the last journal")
     log.add_argument("folder")
+
+    config = sub.add_parser("config", help="read and validate a config file")
+    config.add_argument("file")
+
+    config_save = sub.add_parser("config-save", help="validate and atomically save a config file")
+    config_save.add_argument("file")
+    config_save.add_argument("--content", required=True)
     return parser
 
 
@@ -155,6 +216,25 @@ def main() -> int:
         if ns.command == "sort" and ns.report:
             args.append("--bericht")
         return run_engine(args)
+
+    if ns.command == "config":
+        try:
+            categories, errors = read_config(ns.file)
+        except (OSError, ValueError) as exc:
+            return json_response(False, 2, [{"event": "error", "status": "error", "message": str(exc)}])
+        if errors:
+            return json_response(False, 2, [{"event": "config", "status": "error", "message": error} for error in errors])
+        events = [{"event": "config", "status": "ok", "category": item["category"], "message": " ".join(item["extensions"])} for item in categories]
+        return json_response(True, 0, events)
+
+    if ns.command == "config-save":
+        try:
+            categories, errors = save_config(ns.file, ns.content)
+        except (OSError, ValueError) as exc:
+            return json_response(False, 2, [{"event": "error", "status": "error", "message": str(exc)}])
+        if errors:
+            return json_response(False, 2, [{"event": "config", "status": "error", "message": error} for error in errors])
+        return json_response(True, 0, [{"event": "config", "status": "saved", "message": f"{len(categories)} categories saved"}])
 
     if ns.command in {"undo", "log"}:
         if not os.path.isdir(ns.folder):
