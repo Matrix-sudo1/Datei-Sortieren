@@ -2,7 +2,7 @@
 
 ## Supported Versions
 
-The current development line is v8.0. Security fixes are applied to the active development branch and released with the next stable version.
+The current development line is v8.1. Security fixes are applied to the active development branch and released with the next stable version.
 
 | Version | Supported |
 | --- | --- |
