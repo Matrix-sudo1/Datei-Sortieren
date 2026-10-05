@@ -20,6 +20,54 @@ Ein Bash-basierter Datei-Sortierer mit optionaler Tkinter-GUI. Version **v9.0** 
 - HTML-Bericht
 - optionale Tkinter-GUI mit Drag & Drop und Dark/Light Theme
 
+
+
+## 🚀 Installation
+
+Eine ausführliche Schritt-für-Schritt-Anleitung befindet sich unter **[docs/INSTALLATION.md](docs/INSTALLATION.md)**.
+
+### Schnellstart unter Windows
+
+1. Lade **v9.0.0** von der [GitHub Release-Seite](https://github.com/Matrix-sudo1/Datei-Sortieren/releases/tag/v9.0.0) herunter.
+2. Entpacke das Repository bzw. das bereitgestellte Paket.
+3. Installiere **Python 3** und **Git for Windows / Git Bash**.
+4. Öffne **Git Bash** im Projektordner.
+5. Prüfe Python:
+   ```bash
+   python --version
+   ```
+6. Starte die GUI:
+   ```bash
+   python gui.py
+   ```
+
+> **Hinweis:** Der aktuelle v9.0.0-Stand benötigt keine `requirements.txt`. Die optionale Bibliothek `tkinterdnd2` wird nur für natives Drag & Drop benötigt.
+
+### Linux / macOS
+
+Python 3 und Bash müssen installiert sein. Anschließend:
+
+```bash
+chmod +x datei_sortieren.sh
+python3 gui.py
+```
+
+Für die CLI:
+
+```bash
+./datei_sortieren.sh ~/Downloads --dry-run
+```
+
+### Erste sichere Nutzung
+
+Für die erste Sortierung empfiehlt sich zunächst eine Vorschau:
+
+```bash
+./datei_sortieren.sh ~/Downloads --dry-run
+```
+
+Bei intelligentem Sortieren sollte zuerst die Vorschau geprüft werden. Das **Confirmation Gate** verhindert eine unbeabsichtigte Ausführung ohne ausdrückliche Bestätigung.
+
 ## CLI
 
 ```bash
