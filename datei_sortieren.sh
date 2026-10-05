@@ -833,7 +833,7 @@ sortiere_ordner() {
     for DATEI in "$ORDNER"/*; do
       [ -f "$DATEI" ] || continue
       local RET
-      sortiere_datei "$DATEI" "$ORDNER" "$DRYRUN" "$LOGDATEI" "$NACH_DATUM" "$DATUM_LOG"
+      sortiere_datei "$DATEI" "$ORDNER" "$DRYRUN" "${LOGDATEI}.pending" "$NACH_DATUM" "$DATUM_LOG"
       RET=$?
       case $RET in
         0) VERSCHOBEN=$((VERSCHOBEN+1)); BERICHT_VERSCHOBEN=$((BERICHT_VERSCHOBEN+1)) ;;
