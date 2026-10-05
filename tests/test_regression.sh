@@ -138,4 +138,11 @@ printf '%s' "$INVALID_FOLDER_OUTPUT" | python3 -c 'import json,sys; p=json.load(
 INVALID_ARGS_OUTPUT=$(python3 "$ROOT/api.py" preview || true)
 printf '%s' "$INVALID_ARGS_OUTPUT" | python3 -c 'import json,sys; p=json.load(sys.stdin); assert p["success"] is False and p["exit_code"] == 2 and p["events"][0]["event"] == "error", p'
 
-echo "PASS: v8.4 hardening regression tests"
+echo "[11/11] GUI/API-Entkopplung"
+grep -q 'def _api_aktion(self, args, label, callback=None):' "$ROOT/gui.py" || fail "GUI API-Aktionsadapter fehlt"
+grep -q 'self._api_aktion(args, "SORTIERUNG"' "$ROOT/gui.py" || fail "GUI-Sortierung nutzt nicht die JSON API"
+grep -q 'self._api_aktion(["undo", self.ordner_pfad.get()]' "$ROOT/gui.py" || fail "GUI-Undo nutzt nicht die JSON API"
+grep -q 'self._api_aktion(["log", self.ordner_pfad.get()]' "$ROOT/gui.py" || fail "GUI-Log nutzt nicht die JSON API"
+grep -q 'p.add_argument("--notify", action="store_true")' "$ROOT/api.py" || fail "API-Notify fehlt"
+
+echo "PASS: v8.5 GUI/API regression tests"
