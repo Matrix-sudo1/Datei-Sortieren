@@ -247,6 +247,13 @@ grep -Fq 'self.intelligent_btn' "$ROOT/gui.py" || fail "GUI Intelligent Button f
 grep -Fq 'confidence' "$ROOT/gui.py" || fail "GUI zeigt Konfidenz nicht an"
 grep -Fq 'reason' "$ROOT/gui.py" || fail "GUI zeigt Klassifizierungsgrund nicht an"
 
+echo "[19/19] v9.0 Confidence-Policy Grenzwerte"
+python3 -c 'import sys; sys.path.insert(0, sys.argv[1]); from intelligent import confidence_policy; assert confidence_policy(1.0)["decision"] == "auto"; assert confidence_policy(0.85)["decision"] == "auto"; assert confidence_policy(0.84)["decision"] == "review"; assert confidence_policy(0.65)["decision"] == "review"; assert confidence_policy(0.64)["decision"] == "leave"; assert confidence_policy(0.0)["decision"] == "leave"' "$ROOT"
+POLICY_OUTPUT=$(python3 "$ROOT/api.py" intelligent-preview "$TMP/intelligent")
+printf '%s' "$POLICY_OUTPUT" | python3 -c 'import json,sys; p=json.load(sys.stdin); events=[e for e in p["events"] if e["event"]=="intelligent"]; by_name={e["source"].split("/")[-1]:e for e in events}; assert by_name["foto.jpg"]["decision"]=="auto" and by_name["foto.jpg"]["confidence_band"]=="high", p; assert by_name["project_notes.zzz"]["decision"]=="review" and by_name["project_notes.zzz"]["confidence_band"]=="medium", p; assert by_name["mystery.zzz"]["decision"]=="leave" and by_name["mystery.zzz"]["confidence_band"]=="low", p'
+grep -Fq 'Nicht automatisch' "$ROOT/gui.py" || fail "GUI zeigt Leave-Policy nicht an"
+grep -Fq 'Prüfen' "$ROOT/gui.py" || fail "GUI zeigt Review-Policy nicht an"
+
 echo "PASS: v9.0 intelligent sorting tests"
 
 INVALID_PROFILE_OUTPUT=$(python3 "$ROOT/api.py" intelligent-preview "$TMP/intelligent" --profile ../config || true)
