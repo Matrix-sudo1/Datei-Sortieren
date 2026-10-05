@@ -555,11 +555,6 @@ sortiere_datei() {
       echo -e "${BLAU}VORSCHAU: $DATEINAME  ->  $JAHR/$MONAT/${RESET}"
     else
       zielordner_sicher "$ZIELORDNER" || return 3
-      zielordner_sicher "$ZIELORDNER" || return 3
-      zielordner_sicher "$ZIELORDNER" || return 3
-      zielordner_sicher "$ZIELORDNER" || return 3
-      zielordner_sicher "$ZIELORDNER" || return 3
-      zielordner_sicher "$ZIELORDNER" || return 3
       mkdir -p "$ZIELORDNER" 2>/dev/null || { echo -e "${ROT}Fehler mkdir: $ZIELORDNER${RESET}"; return 3; }
       if $KOPIEREN; then
         cp -- "$DATEI" "$ZIELDATEI" 2>/dev/null
@@ -597,6 +592,7 @@ sortiere_datei() {
     if [ "$DRYRUN_FLAG" = "true" ]; then
       echo -e "${BLAU}VORSCHAU: $DATEINAME  ->  $KATEGORIE/${RESET}"
     else
+      zielordner_sicher "$ZIELORDNER" || return 3
       mkdir -p "$ZIELORDNER" 2>/dev/null || { echo -e "${ROT}Fehler mkdir: $ZIELORDNER${RESET}"; return 3; }
       if $KOPIEREN; then
         cp -- "$DATEI" "$ZIELDATEI" 2>/dev/null
