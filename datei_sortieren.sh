@@ -406,11 +406,15 @@ _lade_standard_kategorien() {
 }
 
 # ============================================
-#  LOG  (Legacy-Format; v8.0 validiert Dateipfade vor dem Schreiben)
+#  LOG / JOURNAL
 # ============================================
+# Das Journal ist null-delimitiert: Unix-Dateinamen duerfen Tabs und
+# Zeilenumbrueche enthalten; NUL ist das einzige unzulaessige Zeichen.
 log_schreiben() {
   local LOGDATEI="$1" QUELLE="$2" ZIEL_DATEI="$3" DATUM="$4"
-  printf '%s\t%s\t%s\n' "$QUELLE" "$ZIEL_DATEI" "$DATUM" >> "$LOGDATEI" 2>/dev/null
+  {
+    printf '%s\0%s\0%s\0' "$QUELLE" "$ZIEL_DATEI" "$DATUM"
+  } >> "$LOGDATEI" 2>/dev/null
 }
 
 # ============================================
@@ -905,33 +909,45 @@ fi
 #  UNDO  (BUGFIX: Tab-Separator)
 # ============================================
 if $UNDO; then
-  [ ! -f "$LOGDATEI" ] && { echo -e "${ROT}Kein Log.${RESET}"; exit 1; }
-  echo -e "${GELB}Rueckgaengig...${RESET}"; echo "--------------------------------------------"
+  if [ ! -f "$LOGDATEI" ]; then
+    echo -e "${GELB}Keine Undo-Daten vorhanden.${RESET}"
+    exit 0
+  fi
+
+  echo -e "${CYAN}Undo: Letzte Sortierung wird rueckgaengig gemacht...${RESET}"
   TMP_LOG=$(mktemp 2>/dev/null) || { echo -e "${ROT}Fehler: mktemp fehlgeschlagen.${RESET}"; exit 1; }
-  tac "$LOGDATEI" > "$TMP_LOG"
+  cp -- "$LOGDATEI" "$TMP_LOG" 2>/dev/null || { rm -f "$TMP_LOG"; echo -e "${ROT}Log konnte nicht gelesen werden.${RESET}"; exit 1; }
+
   WIEDERHERGESTELLT=0; FEHLER_UNDO=0
-  while IFS=$'\t' read -r QUELLE ZIEL_DATEI DATUM; do
+  while IFS= read -r -d '' QUELLE && IFS= read -r -d '' ZIEL_DATEI && IFS= read -r -d '' DATUM; do
     [ -z "$QUELLE" ] && continue
-    if [ -f "$ZIEL_DATEI" ]; then
-      if [ -e "$QUELLE" ]; then
-        echo -e "${ROT}Ziel existiert bereits: ${QUELLE}${RESET}"; FEHLER_UNDO=$((FEHLER_UNDO+1)); continue
-      fi
-      if mv -- "$ZIEL_DATEI" "$QUELLE" 2>/dev/null; then
-        echo -e "${GRUEN}Wiederhergestellt: ${QUELLE##*/}${RESET}"
-        WIEDERHERGESTELLT=$((WIEDERHERGESTELLT+1))
-      else
-        echo -e "${ROT}Fehler: ${QUELLE##*/}${RESET}"; FEHLER_UNDO=$((FEHLER_UNDO+1))
-      fi
+    if [ ! -e "$ZIEL_DATEI" ]; then
+      echo -e "${ROT}Nicht vorhanden: ${ZIEL_DATEI##*/}${RESET}"
+      FEHLER_UNDO=$((FEHLER_UNDO+1)); continue
+    fi
+    if [ -e "$QUELLE" ]; then
+      echo -e "${ROT}Ziel bereits vorhanden, nichts ueberschrieben: ${QUELLE##*/}${RESET}"
+      FEHLER_UNDO=$((FEHLER_UNDO+1)); continue
+    fi
+    if mv -- "$ZIEL_DATEI" "$QUELLE" 2>/dev/null; then
+      echo -e "${GRUEN}Wiederhergestellt: ${QUELLE##*/}${RESET}"
+      WIEDERHERGESTELLT=$((WIEDERHERGESTELLT+1))
     else
-      echo -e "${ROT}Nicht vorhanden: ${ZIEL_DATEI##*/}${RESET}"; FEHLER_UNDO=$((FEHLER_UNDO+1))
+      echo -e "${ROT}Fehler: ${QUELLE##*/}${RESET}"
+      FEHLER_UNDO=$((FEHLER_UNDO+1))
     fi
   done < "$TMP_LOG"
+
   rm -f "$TMP_LOG"
-  find "$ZIEL" -mindepth 1 -type d -empty -delete 2>/dev/null
-  rm -f "$LOGDATEI"
-  echo "--------------------------------------------"
-  echo -e "${GRUEN}Undo: $WIEDERHERGESTELLT wiederhergestellt, $FEHLER_UNDO Fehler.${RESET}"
-  exit 0
+  if [ "$FEHLER_UNDO" -eq 0 ]; then
+    find "$ZIEL" -mindepth 1 -type d -empty -delete 2>/dev/null
+    rm -f "$LOGDATEI"
+    echo -e "${GRUEN}Undo abgeschlossen: $WIEDERHERGESTELLT wiederhergestellt.${RESET}"
+    exit 0
+  fi
+
+  echo -e "${GELB}Undo unvollstaendig: $WIEDERHERGESTELLT wiederhergestellt, $FEHLER_UNDO Fehler. Journal bleibt erhalten.${RESET}"
+  exit 1
 fi
 
 # ============================================
