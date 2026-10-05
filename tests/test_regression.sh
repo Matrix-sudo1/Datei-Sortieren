@@ -397,9 +397,15 @@ echo "PASS: v9.0 Phase 9 rule management"
 
 echo "[28/28] v9.0 Phase 10 Release Hardening"
 mkdir -p "$TMP/automation-hardening"
-AUTO_HARDEN=$(python3 "$ROOT/api.py" automation-start "$TMP/automation-hardening" --interval 2)
-printf "%s" "$AUTO_HARDEN" | python3 -c 'import json,sys; p=json.load(sys.stdin); assert p["success"] and p["events"][0]["status"]=="running", p'
-AUTO_PID=$(printf "%s" "$AUTO_HARDEN" | python3 -c 'import json,sys; p=json.load(sys.stdin); print(p["events"][0]["pid"])')
+python3 "$ROOT/api.py" automation-start "$TMP/automation-hardening" --interval 2 > "$TMP/automation-start.json"
+python3 - "$TMP/automation-start.json" <<'PY'
+import json,sys
+p=json.load(open(sys.argv[1],encoding="utf-8"))
+assert p["success"] and p["events"][0]["status"]=="running", p
+with open(sys.argv[1] + ".pid","w",encoding="utf-8") as handle:
+    handle.write(str(p["events"][0]["pid"]))
+PY
+read -r AUTO_PID < "$TMP/automation-start.json.pid"
 AUTO_STATE="$TMP/automation-hardening/.datei-sortierer/automation.json"
 python3 - "$AUTO_STATE" "$$" <<'PY'
 import json,sys
@@ -409,12 +415,20 @@ state["pid"]=pid
 with open(path,"w",encoding="utf-8") as handle:
     json.dump(state,handle)
 PY
-STALE_PID=$(python3 "$ROOT/api.py" automation-status "$TMP/automation-hardening")
-printf "%s" "$STALE_PID" | python3 -c 'import json,sys; p=json.load(sys.stdin); assert p["success"] and p["events"][0]["status"]=="stopped", p'
+python3 "$ROOT/api.py" automation-status "$TMP/automation-hardening" > "$TMP/automation-stale.json"
+python3 - "$TMP/automation-stale.json" <<'PY'
+import json,sys
+p=json.load(open(sys.argv[1],encoding="utf-8"))
+assert p["success"] and p["events"][0]["status"]=="stopped", p
+PY
 kill "$AUTO_PID" 2>/dev/null || true
 rm -f "$AUTO_STATE"
-BAD_INTERVAL=$(python3 "$ROOT/api.py" automation-start "$TMP/automation-hardening" --interval 0 || true)
-printf "%s" "$BAD_INTERVAL" | python3 -c 'import json,sys; p=json.load(sys.stdin); assert not p["success"] and p["exit_code"]==2, p'
+python3 "$ROOT/api.py" automation-start "$TMP/automation-hardening" --interval 0 > "$TMP/automation-bad-interval.json" || true
+python3 - "$TMP/automation-bad-interval.json" <<'PY'
+import json,sys
+p=json.load(open(sys.argv[1],encoding="utf-8"))
+assert not p["success"] and p["exit_code"]==2, p
+PY
 grep -Fq 'automation_process_matches' "$ROOT/api.py" || fail "Automation PID-Härtung fehlt"
 grep -Fq 'automation_interval_var' "$ROOT/gui.py" || fail "GUI Intervall fehlt"
 grep -Fq 'automation_config_var' "$ROOT/gui.py" || fail "GUI Config-Auswahl fehlt"
