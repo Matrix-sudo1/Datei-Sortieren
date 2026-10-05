@@ -114,7 +114,7 @@ echo "[9/9] Watch-Engine Struktur und Event-Fallback"
 grep -q 'watch_inotify()' "$SCRIPT" || fail "Watch-Engine fehlt"
 grep -q 'read -r -t 1 EVENT_PATH EVENT_TYPE' "$SCRIPT" || fail "Watch-Debounce fehlt"
 grep -q 'inotifywait -q -m -r' "$SCRIPT" || fail "Rekursiver inotify-Watcher fehlt"
-grep -q 'Polling-Fallback' "$SCRIPT" || fail "Polling-Fallback fehlt"
+grep -q 'watch_polling()' "$SCRIPT" || fail "Polling-Fallback fehlt"
 
 # Echtes Event-Smoketest mit einem kleinen inotifywait-Mock. Der Mock liefert
 # genau ein CREATE-Ereignis; danach muss der Watcher sauber auf Polling fallen.
