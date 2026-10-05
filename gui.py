@@ -152,6 +152,8 @@ class DateiSortiererApp:
         self._log_zeilen      = 0   # Instanz-Variable (nicht Klassen-Variable!)
         self._last_kat_count  = {}  # für Theme-Wechsel: Statistiken neu rendern
         self._automation_status_data = {}
+        self._intelligent_rows = []
+        self._intelligent_plan_hash = None
 
         self.script_pfad = self._finde_script()
         self.api_pfad    = str(Path(__file__).parent / "api.py")
@@ -1304,6 +1306,9 @@ class DateiSortiererApp:
                     text=True, encoding="utf-8", errors="replace", check=False)
                 payload = json.loads(proc.stdout)
                 for event in payload.get("events", []):
+                    if event.get("event") == "intelligent-plan":
+                        self._intelligent_plan_hash = event.get("plan_hash")
+                        continue
                     if event.get("event") != "intelligent":
                         continue
                     source = event.get("source", "")
@@ -1315,14 +1320,16 @@ class DateiSortiererApp:
                         "review": "🟡 Prüfen",
                         "leave": "🔴 Nicht automatisch",
                     }.get(decision, f"⚪ {band}")
-                    rows.append((
-                        Path(source).name,
-                        event.get("category", "Sonstiges"),
-                        f"{confidence:.0%}",
-                        decision_label,
-                        event.get("decision", "leave"),
-                        event.get("reason", "")
-                    ))
+                    rows.append({
+                        "source": source,
+                        "name": Path(source).name,
+                        "category": event.get("category", "Sonstiges"),
+                        "confidence": f"{confidence:.0%}",
+                        "decision": decision,
+                        "label": decision_label,
+                        "reason": event.get("reason", ""),
+                        "selected": decision == "auto",
+                    })
                 if not payload.get("success", False):
                     error = next((e.get("message", "Intelligent Preview fehlgeschlagen.")
                                   for e in payload.get("events", [])
@@ -1348,13 +1355,14 @@ class DateiSortiererApp:
                                  fg=self._F["text_dim"], pady=20).pack()
                         self.status_text.configure(text="ℹ️  Keine analysierbaren Dateien.", fg=self._F["text_dim"])
                     else:
+                        self._intelligent_rows = rows
                         for i, row in enumerate(rows):
-                            self._intelligent_zeile(*row, i)
-                        auto_count = sum(1 for r in rows if r[3].startswith("🟢"))
-                        review_count = sum(1 for r in rows if r[3].startswith("🟡"))
-                        leave_count = sum(1 for r in rows if r[3].startswith("🔴"))
+                            self._intelligent_zeile(row, i)
+                        auto_count = sum(1 for r in rows if r["decision"] == "auto")
+                        review_count = sum(1 for r in rows if r["decision"] == "review")
+                        leave_count = sum(1 for r in rows if r["decision"] == "leave")
                         self.status_text.configure(
-                            text=f"🧠  {len(rows)} analysiert – 🟢 {auto_count} sicher · 🟡 {review_count} prüfen · 🔴 {leave_count} nicht automatisch.",
+                            text=f"🧠  {len(rows)} analysiert – 🟢 {auto_count} vorgewählt · 🟡 {review_count} optional · 🔴 {leave_count} gesperrt.",
                             fg=self._F["gruen"])
                     self.intelligent_btn.configure(state="normal")
                 except tk.TclError:
@@ -1374,24 +1382,52 @@ class DateiSortiererApp:
         if not os.path.isdir(pfad):
             messagebox.showerror("Fehler", f"Ordner nicht gefunden:\n{pfad}")
             return
+        selected = [row["source"] for row in self._intelligent_rows if row.get("selected")]
+        if not selected:
+            messagebox.showinfo("Keine Auswahl", "Bitte mindestens einen 🟢 oder 🟡 Vorschlag auswählen.")
+            return
+        review_selected = any(row["selected"] and row["decision"] == "review" for row in self._intelligent_rows)
+        review_text = " 🟡 Prüfvorschläge sind ebenfalls ausgewählt." if review_selected else ""
         if not messagebox.askyesno(
                 "Intelligent sortieren",
-                "Nur 🟢 sichere Intelligent-Vorschläge werden sortiert.\n\n"
-                "Möchtest du diese Vorschläge jetzt ausdrücklich bestätigen und ausführen?"):
+                f"{len(selected)} Datei(en) werden sortiert.{review_text}\n\n"
+                "Die Vorschläge werden vor der Ausführung erneut validiert.\n"
+                "Möchtest du die Auswahl ausdrücklich bestätigen?"):
             return
         args = [sys.executable, self.api_pfad, "intelligent-sort", pfad, "--confirm"]
         if self.unterordner_var.get():
             args.append("--recursive")
-        self._api_aktion(args, "INTELLIGENT SORTIEREN", callback=self._vorschau_laden)
+        if review_selected:
+            args.append("--include-review")
+        if self._intelligent_plan_hash:
+            args.extend(["--plan-hash", self._intelligent_plan_hash])
+        for source in selected:
+            args.extend(["--select", source])
+        self._api_aktion(args, "INTELLIGENT SORTIEREN", callback=self._intelligent_vorschau)
 
-    def _intelligent_zeile(self, dateiname, kategorie, konfidenz, entscheidung, grund, i):
+    def _intelligent_zeile(self, row, i):
         F = self._F
         try:
             bg = F["tabelle_z1"] if i % 2 == 0 else F["tabelle_z2"]
             zeile = tk.Frame(self.tabelle_frame, bg=bg)
             zeile.pack(fill="x")
+            decision = row["decision"]
+            var = tk.BooleanVar(value=row["selected"])
+            row["var"] = var
+            if decision == "leave":
+                cb = tk.Checkbutton(zeile, text="", variable=var, state="disabled",
+                                    bg=bg, fg=F["text"], selectcolor=F["akzent"])
+            else:
+                cb = tk.Checkbutton(
+                    zeile, text="", variable=var,
+                    command=lambda r=row: r.__setitem__("selected", bool(r["var"].get())),
+                    bg=bg, fg=F["text"], selectcolor=F["akzent"],
+                    activebackground=bg, activeforeground=F["text"], width=2)
+            cb.pack(side="left", padx=(6, 2))
+            self._checkbuttons.append(cb)
             for text, breite in [
-                (dateiname, 22), (kategorie, 16), (konfidenz, 10), (entscheidung, 20), (grund, 42)
+                (row["name"], 22), (row["category"], 16), (row["confidence"], 10),
+                (row["label"], 20), (row["reason"], 42)
             ]:
                 tk.Label(zeile, text=text, font=FONT, bg=bg, fg=F["text"],
                          width=breite, anchor="w", padx=8, pady=6).pack(side="left")
