@@ -24,7 +24,7 @@ CONFIDENCE_REVIEW = 0.65
 RULES_FILE_NAME = "learning-rules.json"
 RULES_VERSION = 1
 RULE_ID_RE = re.compile(r"^[A-Za-z0-9_-]{1,64}$")
-RULE_PATTERN_RE = re.compile(r"^[^\\x00\\r\\n]{1,255}$")
+RULE_PATTERN_RE = re.compile(r"^[^\x00\r\n]{1,255}$")
 
 
 def confidence_policy(confidence: float) -> dict[str, str]:
