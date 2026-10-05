@@ -914,15 +914,26 @@ if $ZEIG_LOG; then
   [ ! -f "$LOGDATEI" ] && { echo -e "${ROT}Kein Log gefunden.${RESET}"; exit 1; }
   echo -e "${CYAN}── Log der letzten Sortierung ──${RESET}"
   ANZAHL=0
-  while IFS=$'\t' read -r QUELLE ZIEL_DATEI DATUM; do
+  mapfile -d '' -t JOURNAL_FIELDS < "$LOGDATEI"
+  for ((J=0; J+2<${#JOURNAL_FIELDS[@]}; J+=3)); do
+    QUELLE="${JOURNAL_FIELDS[$J]}"
+    ZIEL_DATEI="${JOURNAL_FIELDS[$((J+1))]}"
+    DATUM="${JOURNAL_FIELDS[$((J+2))]}"
     [ -z "$QUELLE" ] && continue
-    # OPT: ${##*/} statt $(basename), $(dirname)
     QNAME="${QUELLE##*/}"
     ZKAT="${ZIEL_DATEI%/*}"; ZKAT="${ZKAT##*/}"
-    echo -e "  ${GRUEN}$QNAME${RESET}  ->  ${BLAU}${ZKAT}/${RESET}  ${GELB}($DATUM)${RESET}"
+    if $JSON_MODE; then
+      json_event "log" source "$QUELLE" destination "$ZIEL_DATEI" category "$ZKAT" status "ok"
+    else
+      echo -e "  ${GRUEN}$QNAME${RESET}  ->  ${BLAU}${ZKAT}/${RESET}  ${GELB}($DATUM)${RESET}"
+    fi
     ANZAHL=$((ANZAHL+1))
-  done < "$LOGDATEI"
-  echo -e "${CYAN}Gesamt: $ANZAHL  |  --undo zum Rueckgaengig machen${RESET}"
+  done
+  if $JSON_MODE; then
+    json_event "summary" status "ok" message "log entries: $ANZAHL"
+  else
+    echo -e "${CYAN}Gesamt: $ANZAHL  |  --undo zum Rueckgaengig machen${RESET}"
+  fi
   exit 0
 fi
 
