@@ -254,6 +254,12 @@ printf '%s' "$POLICY_OUTPUT" | python3 -c 'import json,sys; p=json.load(sys.stdi
 grep -Fq 'Nicht automatisch' "$ROOT/gui.py" || fail "GUI zeigt Leave-Policy nicht an"
 grep -Fq 'Prüfen' "$ROOT/gui.py" || fail "GUI zeigt Review-Policy nicht an"
 
+echo "[20/20] v9.0 Decision-Engine Aktionen"
+python3 -c 'import sys; sys.path.insert(0, sys.argv[1]); from intelligent import build_decision; assert build_decision({"confidence":1.0,"category":"Dokumente"})["action"]=="eligible_for_confirmation"; assert build_decision({"confidence":0.65,"category":"Code"})["action"]=="requires_review"; assert build_decision({"confidence":0.0,"category":"Sonstiges"})["action"]=="leave_untouched"; assert "action" in build_decision({"confidence":0.85,"category":"Bilder"})' "$ROOT"
+grep -Fq 'decision_action' "$ROOT/intelligent.py" || fail "Decision Engine fehlt"
+
+echo "PASS: v9.0 decision engine tests"
+
 echo "PASS: v9.0 intelligent sorting tests"
 
 INVALID_PROFILE_OUTPUT=$(python3 "$ROOT/api.py" intelligent-preview "$TMP/intelligent" --profile ../config || true)
