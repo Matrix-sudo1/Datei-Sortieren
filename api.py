@@ -429,7 +429,8 @@ def main() -> int:
                             raise ValueError(f"invalid intelligent plan source: {source}")
                         if not ns.recursive and source.parent != root:
                             raise ValueError("intelligent plan source is outside the target folder")
-                        st = source.stat()\n                        signature = f"{st.st_dev}:{st.st_ino}:{st.st_size}:{int(st.st_mtime)}"
+                        st = source.stat()
+                        signature = f"{st.st_dev}:{st.st_ino}:{st.st_size}:{int(st.st_mtime)}"
                         handle.write(str(source).encode("utf-8") + b"\0" + item["category"].encode("utf-8") + b"\0" + signature.encode("ascii") + b"\0")
                     handle.flush()
                     os.fsync(handle.fileno())
