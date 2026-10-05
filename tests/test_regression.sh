@@ -158,8 +158,8 @@ INVALID_CONFIG="$TMP/config/invalid.txt"
 printf 'Bad/Name=txt\n' > "$INVALID_CONFIG"
 INVALID_CONFIG_OUTPUT=$(python3 "$ROOT/api.py" config "$INVALID_CONFIG" || true)
 printf '%s' "$INVALID_CONFIG_OUTPUT" | python3 -c 'import json,sys; p=json.load(sys.stdin); assert not p["success"] and p["exit_code"] == 2, p'
-SAVE_OUTPUT=$(python3 "$ROOT/api.py" config-save "$TMP/config/saved.txt" --content 
-Bilder=jpg png\nDokumente=pdf txt\n')
+CONFIG_CONTENT="Bilder=jpg png\nDokumente=pdf txt\n"
+SAVE_OUTPUT=$(python3 "$ROOT/api.py" config-save "$TMP/config/saved.txt" --content "$CONFIG_CONTENT")
 printf '%s' "$SAVE_OUTPUT" | python3 -c 'import json,sys; p=json.load(sys.stdin); assert p["success"], p'
 grep -q 'Bilder=jpg png' "$TMP/config/saved.txt" || fail "Config-Speichern fehlgeschlagen"
 grep -q 'def _baue_tab_config(self):' "$ROOT/gui.py" || fail "Config-GUI fehlt"
