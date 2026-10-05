@@ -2,7 +2,7 @@ name: Tests
 
 on:
   push:
-    branches: ["main", "v8-refactor"]
+    branches: ["main", "v8-refactor", "v8.2-final"]
   pull_request:
     branches: ["main"]
 
@@ -13,3 +13,5 @@ jobs:
       - uses: actions/checkout@v4
       - name: Run regression tests
         run: bash tests/test_regression.sh
+      - name: Verify API syntax
+        run: python3 -m py_compile api.py
