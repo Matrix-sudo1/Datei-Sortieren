@@ -197,7 +197,7 @@ printf '%s' "$PROFILE_OUTPUT" | python3 -c 'import json,sys; p=json.load(sys.std
 
 echo "[16/16] v8.8 Automation Lifecycle"
 mkdir -p "$TMP/automation"
-AUTO_START=$(python3 "$ROOT/api.py" automation-start "$TMP/automation")
+AUTO_START=$(python3 "$ROOT/api.py" automation-start "$TMP/automation" --interval 1)
 printf '%s' "$AUTO_START" | python3 -c 'import json,sys; p=json.load(sys.stdin); assert p["success"], p; assert p["events"][0]["status"] == "running", p'
 AUTO_STATUS=$(python3 "$ROOT/api.py" automation-status "$TMP/automation")
 printf '%s' "$AUTO_STATUS" | python3 -c 'import json,sys; p=json.load(sys.stdin); assert p["success"], p; assert p["events"][0]["status"] == "running", p'
