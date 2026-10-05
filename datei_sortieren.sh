@@ -847,30 +847,33 @@ watch_inotify() {
   echo -e "${GRUEN}Echtzeit-Ueberwachung (inotifywait, rekursiv + debounce)${RESET}"; echo ""
   declare -A AUSSTEHEND
   local LETZTES_EREIGNIS=0
-  local EVENT
   local RELATIVE EVENT_PATH EVENT_TYPE
 
   # -m: dauerhaft lauschen, -r: Unterordner mitbeobachten.
   # Nur Dateien direkt im Wurzelordner werden verarbeitet; Dateien in
   # Zielkategorien erzeugen dadurch keine Sortierschleife.
-  while IFS='|' read -r EVENT_PATH EVENT_TYPE; do
-    [ -n "$EVENT_PATH" ] || continue
-    case "$EVENT_TYPE" in
-      *CLOSE_WRITE*|*MOVED_TO*|*CREATE*)
-        case "$EVENT_PATH" in
-          "$ZIEL"/*)
-            RELATIVE="${EVENT_PATH#"$ZIEL"/}"
-            [[ "$RELATIVE" == */* ]] && continue
-            [ "${RELATIVE##*/}" = ".sortier_log.txt" ] && continue
-            AUSSTEHEND["$EVENT_PATH"]=1
-            LETZTES_EREIGNIS=$(date +%s)
-            ;;
-        esac
-        ;;
-    esac
+  while true; do
+    EVENT_PATH=""; EVENT_TYPE=""
+    if IFS='|' read -r -t 1 EVENT_PATH EVENT_TYPE; then
+      [ -n "$EVENT_PATH" ] || continue
+      case "$EVENT_TYPE" in
+        *CLOSE_WRITE*|*MOVED_TO*|*CREATE*)
+          case "$EVENT_PATH" in
+            "$ZIEL"/*)
+              RELATIVE="${EVENT_PATH#"$ZIEL"/}"
+              [[ "$RELATIVE" == */* ]] && continue
+              [ "${RELATIVE##*/}" = ".sortier_log.txt" ] && continue
+              AUSSTEHEND["$EVENT_PATH"]=1
+              LETZTES_EREIGNIS=$(date +%s)
+              ;;
+          esac
+          ;;
+      esac
+    fi
 
     # Kurze Schreib-/Move-Bursts werden gesammelt und erst nach einer
-    # Sekunde Ereignisruhe verarbeitet.
+    # Sekunde Ereignisruhe verarbeitet. Der Timeout von read stellt sicher,
+    # dass auch ein einzelnes Ereignis ohne Folgeereignis verarbeitet wird.
     if [ "${#AUSSTEHEND[@]}" -gt 0 ] && [ $(( $(date +%s) - LETZTES_EREIGNIS )) -ge 1 ]; then
       for DATEI in "${!AUSSTEHEND[@]}"; do
         watch_verarbeite_datei "$DATEI"
