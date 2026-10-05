@@ -217,7 +217,7 @@ def automation_process_matches(pid: int, folder: str) -> bool:
         raw = proc_cmdline.read_bytes()
     except OSError:
         return False
-    argv = [part.decode("utf-8", errors="replace") for part in raw.split(b"\\x00") if part]
+    argv = [part.decode("utf-8", errors="replace") for part in raw.split(b"\x00") if part]
     if not argv:
         return False
     root = str(Path(folder).expanduser().resolve())
@@ -226,7 +226,7 @@ def automation_process_matches(pid: int, folder: str) -> bool:
         "--watch" in argv
         and engine in argv
         and root in argv
-        and argv[0].endswith("/bash")
+        and (argv[0] == "bash" or argv[0].endswith("/bash"))
     )
 
 
