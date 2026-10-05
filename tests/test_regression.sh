@@ -146,7 +146,6 @@ grep -q 'self._api_aktion(["log", self.ordner_pfad.get()]' "$ROOT/gui.py" || fai
 grep -q 'p.add_argument("--notify", action="store_true")' "$ROOT/api.py" || fail "API-Notify fehlt"
 
 echo "[12/12] Konfigurations-API und GUI-Editor"
-set -x
 mkdir -p "$TMP/config"
 cat > "$TMP/config/custom.txt" <<'CFG'
 # custom
@@ -159,7 +158,7 @@ INVALID_CONFIG="$TMP/config/invalid.txt"
 printf 'Bad/Name=txt\n' > "$INVALID_CONFIG"
 INVALID_CONFIG_OUTPUT=$(python3 "$ROOT/api.py" config "$INVALID_CONFIG" || true)
 printf '%s' "$INVALID_CONFIG_OUTPUT" | python3 -c 'import json,sys; p=json.load(sys.stdin); assert not p["success"] and p["exit_code"] == 2, p'
-CONFIG_CONTENT=
+CONFIG_CONTENT=$(printf 'Bilder=jpg png\nDokumente=pdf txt\n')
 SAVE_OUTPUT=$(python3 "$ROOT/api.py" config-save "$TMP/config/saved.txt" --content "$CONFIG_CONTENT")
 printf '%s' "$SAVE_OUTPUT" | python3 -c 'import json,sys; p=json.load(sys.stdin); assert p["success"], p'
 grep -q 'Bilder=jpg png' "$TMP/config/saved.txt" || fail "Config-Speichern fehlgeschlagen"
