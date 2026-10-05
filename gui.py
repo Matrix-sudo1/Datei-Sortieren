@@ -1313,6 +1313,7 @@ class DateiSortiererApp:
                         event.get("category", "Sonstiges"),
                         f"{confidence:.0%}",
                         decision_label,
+                        event.get("decision", "leave"),
                         event.get("reason", "")
                     ))
                 if not payload.get("success", False):
@@ -1362,7 +1363,7 @@ class DateiSortiererApp:
             zeile = tk.Frame(self.tabelle_frame, bg=bg)
             zeile.pack(fill="x")
             for text, breite in [
-                (dateiname, 22), (kategorie, 16), (konfidenz, 10), (entscheidung, 18), (grund, 44)
+                (dateiname, 22), (kategorie, 16), (konfidenz, 10), (entscheidung, 20), (grund, 42)
             ]:
                 tk.Label(zeile, text=text, font=FONT, bg=bg, fg=F["text"],
                          width=breite, anchor="w", padx=8, pady=6).pack(side="left")
