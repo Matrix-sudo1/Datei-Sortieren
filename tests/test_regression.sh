@@ -73,7 +73,10 @@ printf 'tab' > "$TMP/undo/file	with	tabs.txt"
 bash "$SCRIPT" "$TMP/undo" >/dev/null
 assert_file "$TMP/undo/Dokumente/file with spaces.txt"
 assert_file "$TMP/undo/Dokumente/file	with	tabs.txt"
-bash "$SCRIPT" "$TMP/undo" --undo >/dev/null
+if ! bash "$SCRIPT" "$TMP/undo" --undo >"$TMP/undo-output.txt" 2>&1; then
+  cat "$TMP/undo-output.txt" >&2
+  fail "Undo fehlgeschlagen"
+fi
 assert_file "$TMP/undo/file with spaces.txt"
 assert_file "$TMP/undo/file	with	tabs.txt"
 
