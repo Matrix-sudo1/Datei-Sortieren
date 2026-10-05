@@ -1,6 +1,6 @@
 # Security Patches – v8.1
 
-This document records the security hardening included in the v8.0 refactoring branch.
+This document records the security hardening included in the v8.1 refactoring branch.
 
 ## v8.1
 
