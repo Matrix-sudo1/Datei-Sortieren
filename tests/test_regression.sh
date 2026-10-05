@@ -65,4 +65,16 @@ printf "image" > "$TMP/symlink/photo.jpg"
 bash "$SCRIPT" "$TMP/symlink" >/dev/null 2>&1 || true
 assert_file "$TMP/symlink/photo.jpg"
 
+
+echo "[6/6] Undo-Journal mit Sonderzeichen"
+mkdir -p "$TMP/undo"
+printf 'undo' > "$TMP/undo/file with spaces.txt"
+printf 'tab' > "$TMP/undo/file	with	tabs.txt"
+bash "$SCRIPT" "$TMP/undo" >/dev/null
+assert_file "$TMP/undo/Dokumente/file with spaces.txt"
+assert_file "$TMP/undo/Dokumente/file	with	tabs.txt"
+bash "$SCRIPT" "$TMP/undo" --undo >/dev/null
+assert_file "$TMP/undo/file with spaces.txt"
+assert_file "$TMP/undo/file	with	tabs.txt"
+
 echo "PASS: v8.1 regression tests"
