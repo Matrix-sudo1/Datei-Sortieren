@@ -220,7 +220,7 @@ echo "[17/17] v9.0 Deterministische Intelligent-Sorting-Klassifizierung"
 mkdir -p "$TMP/intelligent"
 printf 'jpg' > "$TMP/intelligent/foto.jpg"
 printf 'pdf' > "$TMP/intelligent/rechnung.pdf"
-printf 'unknown' > "$TMP/intelligent/project_notes.zzz"
+printf 'unknown' > "$TMP/intelligent/project_code.zzz"
 printf 'unknown' > "$TMP/intelligent/mystery.zzz"
 INTELLIGENT_OUTPUT=$(python3 "$ROOT/api.py" intelligent-preview "$TMP/intelligent")
 printf '%s' "$INTELLIGENT_OUTPUT" | python3 -c '
