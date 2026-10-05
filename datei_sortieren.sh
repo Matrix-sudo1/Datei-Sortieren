@@ -919,7 +919,7 @@ if $UNDO; then
   cp -- "$LOGDATEI" "$TMP_LOG" 2>/dev/null || { rm -f "$TMP_LOG"; echo -e "${ROT}Log konnte nicht gelesen werden.${RESET}"; exit 1; }
 
   WIEDERHERGESTELLT=0; FEHLER_UNDO=0
-  while IFS= read -r -d 
+  while IFS= read -r -d $'\\0' QUELLE && IFS= read -r -d $'\\0' ZIEL_DATEI && IFS= read -r -d $'\\0' DATUM; do
     [ -z "$QUELLE" ] && continue
     if [ ! -e "$ZIEL_DATEI" ]; then
       echo -e "${ROT}Nicht vorhanden: ${ZIEL_DATEI##*/}${RESET}"
