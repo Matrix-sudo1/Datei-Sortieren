@@ -425,7 +425,6 @@ html_escape() {
   STR="${STR//</&lt;}"
   STR="${STR//>/&gt;}"
   STR="${STR//\"/&quot;}"
-  STR="${STR//\'/&#39;}"
   echo "$STR"
 }
 
