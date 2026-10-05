@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # ============================================
-#  Datei-Sortierer GUI v8.4
+#  Datei-Sortierer GUI v8.5
 #  NEU:
 #  - Drag & Drop (Ordner ins Fenster ziehen)
 #  - Dark / Light Theme Umschalter
@@ -128,7 +128,7 @@ def _parse_drop(data):
 class DateiSortiererApp:
     def __init__(self, root):
         self.root = root
-        self.root.title("Datei-Sortierer v8.4")
+        self.root.title("Datei-Sortierer v8.5")
         self.root.geometry("900x780")
         self.root.minsize(800, 660)
         self.root.resizable(True, True)
@@ -1013,7 +1013,7 @@ class DateiSortiererApp:
                  font=FONT_KLEIN, bg=F["bg"],
                  fg=F["gruen"] if bash_ok else F["rot"], padx=8)
         self._bash_status_lbl.pack(side="right")
-        tk.Label(bar, text="GUI v8.4",
+        tk.Label(bar, text="GUI v8.5",
                  font=FONT_KLEIN, bg=F["bg"], fg=F["text_dim"], padx=8).pack(side="right")
 
     # ------------------------------------------
@@ -1116,68 +1116,12 @@ class DateiSortiererApp:
         if not messagebox.askyesno("Sortieren starten",
                                     f"Dateien sortieren in:\n\n{pfad}"): return
 
-        cmd_args = [pfad]
-        if self.kopieren_var.get():    cmd_args.append("--kopieren")
-        if self.unterordner_var.get(): cmd_args.append("--unterordner")
-        if self.notify_var.get():      cmd_args.append("--notify")
-        if self.bericht_var.get():     cmd_args.append("--bericht")
-
-        self.laeuft = True
-        self._buttons_sperren(True)
-        self.status_text.configure(text="🚀  Sortierung läuft...", fg=self._F["gelb"])
-        self._tab_wechseln("verlauf")
-        kat_count = {}
-
-        def _t():
-            returncode = -1
-            try:
-                cmd = [self.bash_pfad, self.script_pfad] + cmd_args
-                self.aktiver_proc = subprocess.Popen(
-                        cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
-                        text=True, encoding="utf-8", errors="replace")
-
-                self._nach(self._verlauf_schreiben, f"\n── Sortierung gestartet ──\n", "header")
-                self._nach(self._verlauf_schreiben, f"  Ordner: {pfad}\n", "dim")
-
-                for zeile in self.aktiver_proc.stdout:
-                    if self._zerstoert: break
-                    z = _ANSI_RE.sub("", zeile).strip()
-                    if not z: continue
-                    if ("OK:" in z and "->" in z) or ("OK:" in z and "=>" in z):
-                        try:
-                            pfeil = "->" if "->" in z else "=>"
-                            kat = _ANSI_RE.sub("", z.split(pfeil)[1]).strip().rstrip("/")
-                            if kat:
-                                kat_count[kat] = kat_count.get(kat, 0) + 1
-                        except Exception: pass
-                    tag = ("gruen" if any(w in z for w in ["OK:","Fertig","Wiederhergestellt"])
-                           else "gelb" if any(w in z for w in ["Sonstiges","IGNORIERT","Tipp","Bericht"])
-                           else "rot"  if any(w in z for w in ["Fehler","ERROR"])
-                           else None)
-                    self._nach(self._verlauf_schreiben, f"  {z}\n", tag)
-
-                self.aktiver_proc.wait()
-                returncode = self.aktiver_proc.returncode
-            except FileNotFoundError:
-                self._nach(self._verlauf_schreiben, "❌ Bash nicht gefunden.\n", "rot")
-            except Exception as e:
-                self._nach(self._verlauf_schreiben, f"❌ {e}\n", "rot")
-            finally:
-                self.aktiver_proc = None
-                self.laeuft = False
-                if not self._zerstoert:
-                    if returncode == 0:
-                        self._nach(lambda: self._ui(
-                            self.status_text.configure, text="✅  Fertig!", fg=self._F["gruen"]))
-                        self._nach(self._zeige_statistiken, kat_count)
-                        self._nach(lambda: None if self.laeuft else self._vorschau_laden())
-                    else:
-                        self._nach(lambda: self._ui(
-                            self.status_text.configure,
-                            text="❌  Fehler oder abgebrochen.", fg=self._F["rot"]))
-                    self._nach(self._buttons_sperren, False)
-
-        threading.Thread(target=_t, daemon=True).start()
+        args = ["sort", pfad]
+        if self.kopieren_var.get():    args.append("--copy")
+        if self.unterordner_var.get(): args.append("--recursive")
+        if self.notify_var.get():      args.append("--notify")
+        if self.bericht_var.get():     args.append("--report")
+        self._api_aktion(args, "SORTIERUNG", callback=self._vorschau_laden)
 
     def _abbrechen(self):
         if self.aktiver_proc and self.laeuft:
@@ -1210,50 +1154,67 @@ class DateiSortiererApp:
         if self.laeuft: return
         if not self._vorbedingungen_pruefen(): return
         if messagebox.askyesno("Rückgängig", "Letzte Sortierung rückgängig machen?"):
-            self._script_aktion([self.ordner_pfad.get(), "--undo"], "UNDO")
+            self._api_aktion(["undo", self.ordner_pfad.get()], "UNDO")
 
     def _zeige_log(self):
         if not self.ordner_pfad.get() or not os.path.isdir(self.ordner_pfad.get()):
             messagebox.showwarning("Kein Ordner", "Bitte zuerst Ordner auswählen."); return
         if self.laeuft: return
         if not self._vorbedingungen_pruefen(): return
-        self._script_aktion([self.ordner_pfad.get(), "--log"], "LOG")
+        self._api_aktion(["log", self.ordner_pfad.get()], "LOG")
 
-    def _script_aktion(self, args, label, callback=None):
+    def _api_aktion(self, args, label, callback=None):
         if self.laeuft: return
         self.laeuft = True
         self._buttons_sperren(True)
-        self._nach(self._verlauf_schreiben, f"\n── {label} ──\n", "header")
-        returncode = -1
+        self._nach(self._verlauf_schreiben, f"\n── {label} (JSON API) ──\n", "header")
 
         def _t():
-            nonlocal returncode
+            returncode = -1
+            payload = None
             try:
-                cmd = [self.bash_pfad, self.script_pfad] + args
-                proc = subprocess.Popen(
-                    cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
-                    text=True, encoding="utf-8", errors="replace")
-                for zeile in proc.stdout:
-                    z = _ANSI_RE.sub("", zeile).strip()
-                    if z:
-                        tag = ("gruen" if any(w in z for w in ["Wiederhergestellt","OK:","eingerichtet","entfernt"])
-                               else "rot" if any(w in z for w in ["Fehler","ERROR"])
-                               else None)
-                        self._nach(self._verlauf_schreiben, f"  {z}\n", tag)
-                proc.wait()
+                proc = subprocess.run(
+                    [sys.executable, self.api_pfad] + args,
+                    stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+                    text=True, encoding="utf-8", errors="replace", check=False)
                 returncode = proc.returncode
+                payload = json.loads(proc.stdout)
+                for event in payload.get("events", []):
+                    event_type = event.get("event", "event")
+                    source = event.get("source", "")
+                    destination = event.get("destination", "")
+                    message = event.get("message", "")
+                    if destination and source:
+                        line = f"{source} -> {destination}"
+                    elif message:
+                        line = message
+                    else:
+                        line = event_type
+                    status = event.get("status", "")
+                    tag = ("gruen" if status in {"ok", "success"} or event_type in {"move", "undo", "summary"}
+                           else "rot" if status == "error" or event_type == "error"
+                           else None)
+                    self._nach(self._verlauf_schreiben, f"  {line}\n", tag)
+                if not payload.get("success", False):
+                    error = next((e.get("message", "API-Fehler") for e in payload.get("events", [])
+                                  if e.get("event") == "error"), "API-Fehler")
+                    self._nach(self._verlauf_schreiben, f"❌ {error}\n", "rot")
+            except json.JSONDecodeError:
+                self._nach(self._verlauf_schreiben, "❌ Ungültige JSON-Antwort der API.\n", "rot")
             except Exception as e:
-                self._nach(self._verlauf_schreiben, f"❌ {e}\n", "rot")
+                self._nach(self._verlauf_schreiben, f"❌ API-Fehler: {e}\n", "rot")
             finally:
                 self.laeuft = False
                 if not self._zerstoert:
-                    if returncode == 0:
+                    if returncode == 0 and payload and payload.get("success", False):
                         self._nach(self._verlauf_schreiben,
                                    f"✅ {label} abgeschlossen.\n", "gruen")
-                        if callback: self._nach(callback)
+                        if callback:
+                            self._nach(callback)
+                    else:
+                        self._nach(self._verlauf_schreiben,
+                                   f"❌ {label} fehlgeschlagen.\n", "rot")
                     self._nach(self._buttons_sperren, False)
-
-        threading.Thread(target=_t, daemon=True).start()
 
     def _vorbedingungen_pruefen(self):
         if not self.bash_pfad:

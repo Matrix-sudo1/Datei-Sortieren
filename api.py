@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Stable JSON adapter for Datei-Sortierer v8.4.
+"""Stable JSON adapter for Datei-Sortierer v8.5.
 
 The Bash script remains the single source of truth for sorting behaviour.
 This module exposes structured JSON for GUI and automation clients.
@@ -88,7 +88,7 @@ def run_engine(args: list[str]) -> int:
 
 
 def build_parser() -> argparse.ArgumentParser:
-    parser = JsonArgumentParser(description="JSON API for Datei-Sortierer v8.4")
+    parser = JsonArgumentParser(description="JSON API for Datei-Sortierer v8.5")
     sub = parser.add_subparsers(dest="command", required=True)
 
     def common(p: argparse.ArgumentParser) -> None:
@@ -99,6 +99,7 @@ def build_parser() -> argparse.ArgumentParser:
         p.add_argument("--profile")
         p.add_argument("--config")
         p.add_argument("--ignore")
+        p.add_argument("--notify", action="store_true")
 
     preview = sub.add_parser("preview", help="preview without changing files")
     common(preview)
@@ -149,6 +150,8 @@ def main() -> int:
             args.extend(["--config", ns.config])
         if ns.ignore:
             args.extend(["--ignore", ns.ignore])
+        if ns.notify:
+            args.append("--notify")
         if ns.command == "sort" and ns.report:
             args.append("--bericht")
         return run_engine(args)

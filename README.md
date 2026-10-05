@@ -1,6 +1,6 @@
 # 📂 Datei-Sortierer
 
-Ein Bash-basierter Datei-Sortierer mit optionaler Tkinter-GUI. Version **v8.4** konzentriert sich auf Stabilität, sichere Pfadbehandlung, reproduzierbare Tests und eine gemeinsame Sortier-Engine für CLI und GUI.
+Ein Bash-basierter Datei-Sortierer mit optionaler Tkinter-GUI. Version **v8.5** konzentriert sich auf Stabilität, sichere Pfadbehandlung, reproduzierbare Tests und eine gemeinsame Sortier-Engine für CLI und GUI.
 
 ## Kernfunktionen
 
@@ -65,7 +65,7 @@ Die mitgelieferten Profile verwenden dasselbe Format und werden von der Bash-Eng
 
 ## JSON-API
 
-v8.4 ergänzt einen stabilen Maschinenzugang über `api.py`. Die API verwendet die Bash-Engine weiterhin als einzige Sortierlogik und liefert strukturierte JSON-Antworten mit Ereignissen.
+v8.5 ergänzt einen stabilen Maschinenzugang über `api.py`. Die API verwendet die Bash-Engine weiterhin als einzige Sortierlogik und liefert strukturierte JSON-Antworten mit Ereignissen.
 
 ```bash
 python3 api.py preview ~/Downloads
@@ -92,6 +92,8 @@ Voraussetzungen:
 ### Engine-basierte Vorschau
 
 Die GUI berechnet die Vorschau nicht mehr mit einer eigenen Kopie der Kategorien. Sie ruft die eigentliche Sortier-Engine im `--dry-run` auf.
+
+Seit v8.5 laufen auch Sortieren, Undo und Log der GUI über `api.py`. Damit ist die GUI vollständig vom menschenlesbaren Bash-Output entkoppelt. Vorschau und reale Sortierung verwenden dieselbe Engine und dieselbe JSON-Schnittstelle.
 
 Damit verwenden Vorschau und reale Sortierung dieselbe:
 
