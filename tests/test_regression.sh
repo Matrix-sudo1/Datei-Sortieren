@@ -133,9 +133,9 @@ PATH="$TMP/watch-bin:$PATH" timeout 4 bash "$SCRIPT" "$TMP/watch" --watch >/dev/
 assert_file "$TMP/watch/Dokumente/new.txt"
 
 echo "[9/10] JSON-API Fehler bleiben maschinenlesbar"
-INVALID_FOLDER_OUTPUT=$(python3 "$ROOT/api.py" preview "$TMP/does-not-exist")
+INVALID_FOLDER_OUTPUT=$(python3 "$ROOT/api.py" preview "$TMP/does-not-exist" || true)
 printf '%s' "$INVALID_FOLDER_OUTPUT" | python3 -c 'import json,sys; p=json.load(sys.stdin); assert p["success"] is False and p["exit_code"] == 2 and p["events"][0]["event"] == "error", p'
-INVALID_ARGS_OUTPUT=$(python3 "$ROOT/api.py" preview)
+INVALID_ARGS_OUTPUT=$(python3 "$ROOT/api.py" preview || true)
 printf '%s' "$INVALID_ARGS_OUTPUT" | python3 -c 'import json,sys; p=json.load(sys.stdin); assert p["success"] is False and p["exit_code"] == 2 and p["events"][0]["event"] == "error", p'
 
 echo "PASS: v8.4 hardening regression tests"
