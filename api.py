@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Stable JSON adapter for Datei-Sortierer v8.6.
+"""Stable JSON adapter for Datei-Sortierer v8.7.
 
 The Bash script remains the single source of truth for sorting behaviour.
 This module exposes structured JSON for GUI and automation clients.
@@ -7,6 +7,7 @@ This module exposes structured JSON for GUI and automation clients.
 from __future__ import annotations
 
 import argparse
+import re
 import json
 import os
 import subprocess
@@ -18,8 +19,8 @@ ROOT = Path(__file__).resolve().parent
 ENGINE = ROOT / "datei_sortieren.sh"
 
 MAX_CONFIG_SIZE = 1024 * 1024
-CATEGORY_RE = __import__("re").compile(r"^[A-Za-z0-9_-]+$")
-EXT_RE = __import__("re").compile(r"^[A-Za-z0-9]+$")
+CATEGORY_RE = re.compile(r"^[A-Za-z0-9_-]+$")
+EXT_RE = re.compile(r"^[A-Za-z0-9]+$")
 
 
 def read_config(path: str) -> tuple[list[dict], list[str]]:
@@ -57,13 +58,33 @@ def save_config(path: str, content: str) -> tuple[list[dict], list[str]]:
     if len(content.encode("utf-8")) > MAX_CONFIG_SIZE:
         raise ValueError("config content is too large")
     target = Path(path).expanduser()
-    tmp = target.with_name(target.name + ".tmp")
-    tmp.write_text(content, encoding="utf-8")
+    if target.is_symlink():
+        raise ValueError(f"refusing to replace symlink: {target}")
+    parent = target.parent
+    if not parent.is_dir():
+        raise ValueError(f"config directory not found: {parent}")
+
+    import tempfile
+    fd, tmp_name = tempfile.mkstemp(prefix=f".{target.name}.", suffix=".tmp", dir=parent)
+    tmp = Path(tmp_name)
     try:
+        with os.fdopen(fd, "w", encoding="utf-8") as handle:
+            handle.write(content)
+            handle.flush()
+            os.fsync(handle.fileno())
         categories, errors = read_config(str(tmp))
         if errors:
             return categories, errors
         os.replace(tmp, target)
+        try:
+            dir_fd = os.open(parent, os.O_DIRECTORY)
+        except (AttributeError, OSError):
+            dir_fd = None
+        if dir_fd is not None:
+            try:
+                os.fsync(dir_fd)
+            finally:
+                os.close(dir_fd)
         return categories, []
     finally:
         try:

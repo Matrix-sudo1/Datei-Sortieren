@@ -1,6 +1,6 @@
 #!/bin/bash
 # ============================================
-#  Datei-Sortierer v8.4
+#  Datei-Sortierer v8.7
 #  Optimierungen gegenüber v7.0:
 #  - $(basename) → ${f##*/}  (84x schneller)
 #  - $(tr lower) → ${v,,}    (47x schneller)
@@ -137,14 +137,14 @@ in_papierkorb() {
 hilfe() {
   echo -e "${CYAN}"
   echo "╔══════════════════════════════════════════════╗"
-  echo "║         Datei-Sortierer v8.2                 ║"
+  echo "║         Datei-Sortierer v8.7                 ║"
   echo "╚══════════════════════════════════════════════╝"
   echo -e "${RESET}"
   echo "Verwendung:  ./datei_sortieren.sh [ORDNER] [OPTIONEN]"
   echo ""
   echo "Basis:"
   echo "  --dry-run           Vorschau (nichts wird verschoben)
-  --json              Maschinenlesbare NDJSON-Ereignisse (v8.2)"
+  --json              Maschinenlesbare NDJSON-Ereignisse (v8.7)"
   echo "  --kopieren          Dateien kopieren statt verschieben"
   echo "  --unterordner       Dateien in Unterordnern einbeziehen"
   echo "  --undo              Letzte Sortierung rueckgaengig machen"
@@ -446,11 +446,44 @@ _lade_standard_kategorien() {
 # ============================================
 # Das Journal ist null-delimitiert: Unix-Dateinamen duerfen Tabs und
 # Zeilenumbrueche enthalten; NUL ist das einzige unzulaessige Zeichen.
+# Journal-Eintraege werden NUL-delimitiert geschrieben. Ein unvollstaendiger
+# letzter Datensatz wird niemals stillschweigend als gueltig behandelt.
 log_schreiben() {
   local LOGDATEI="$1" QUELLE="$2" ZIEL_DATEI="$3" DATUM="$4"
-  {
-    printf '%s\0%s\0%s\0' "$QUELLE" "$ZIEL_DATEI" "$DATUM"
-  } >> "$LOGDATEI" 2>/dev/null
+  local TMP_EINTRAG
+  TMP_EINTRAG=$(mktemp 2>/dev/null) || return 1
+  if ! printf '%s\0%s\0%s\0' "$QUELLE" "$ZIEL_DATEI" "$DATUM" > "$TMP_EINTRAG"; then
+    rm -f "$TMP_EINTRAG"; return 1
+  fi
+  if ! cat "$TMP_EINTRAG" >> "$LOGDATEI" 2>/dev/null; then
+    rm -f "$TMP_EINTRAG"; return 1
+  fi
+  rm -f "$TMP_EINTRAG"
+  sync -d "$LOGDATEI" 2>/dev/null || sync "$LOGDATEI" 2>/dev/null || true
+  return 0
+}
+
+journal_validieren() {
+  local LOGDATEI="$1"
+  [ -f "$LOGDATEI" ] || return 0
+  local -a FELDER=()
+  mapfile -d '' -t FELDER < "$LOGDATEI" 2>/dev/null || return 1
+  [ $(( ${#FELDER[@]} % 3 )) -eq 0 ]
+}
+
+journal_lesen_pfad() {
+  local LOGDATEI="$1"
+  if [ -s "${LOGDATEI}.pending" ]; then
+    printf '%s' "${LOGDATEI}.pending"
+  else
+    printf '%s' "$LOGDATEI"
+  fi
+}
+
+journal_commit() {
+  local LOGDATEI="$1" PENDING="${LOGDATEI}.pending"
+  [ -f "$PENDING" ] || return 0
+  mv -f -- "$PENDING" "$LOGDATEI"
 }
 
 # ============================================
@@ -549,6 +582,23 @@ zielordner_sicher() {
 }
 
 # ============================================
+#  RACE-/TOCTOU-SCHUTZ
+# ============================================
+datei_signatur() {
+  local DATEI="$1"
+  if stat -c '%d:%i:%s:%Y' "$DATEI" 2>/dev/null; then return 0; fi
+  stat -f '%d:%i:%z:%m' "$DATEI" 2>/dev/null
+}
+
+datei_unveraendert() {
+  local DATEI="$1" ERWARTET="$2" AKTUELL
+  [ -f "$DATEI" ] || return 1
+  [ ! -L "$DATEI" ] || return 1
+  AKTUELL=$(datei_signatur "$DATEI") || return 1
+  [ "$AKTUELL" = "$ERWARTET" ]
+}
+
+# ============================================
 #  DATEI SORTIEREN  (OPT: keine Subshells mehr)
 # ============================================
 sortiere_datei() {
@@ -563,6 +613,9 @@ sortiere_datei() {
     echo -e "${GELB}ÜBERSPRUNGEN (Symlink): ${DATEI##*/}${RESET}"
     return 2
   fi
+
+  local QUELLE_SIG
+  QUELLE_SIG=$(datei_signatur "$DATEI") || return 2
 
   # OPT: ${##*/} statt $(basename)
   local DATEINAME="${DATEI##*/}"
@@ -596,6 +649,11 @@ sortiere_datei() {
       json_event "preview" source "$DATEI" destination "$ZIELDATEI" category "$JAHR/$MONAT" status "planned"
     else
       zielordner_sicher "$ZIELORDNER" || return 3
+      datei_unveraendert "$DATEI" "$QUELLE_SIG" || {
+        echo -e "${ROT}Fehler: Quelldatei wurde waehrend der Verarbeitung veraendert oder ersetzt.${RESET}" >&2
+        json_event "move" source "$DATEI" status "error" message "source changed during operation"
+        return 3
+      }
       mkdir -p "$ZIELORDNER" 2>/dev/null || { echo -e "${ROT}Fehler mkdir: $ZIELORDNER${RESET}"; return 3; }
       if $KOPIEREN; then
         cp -- "$DATEI" "$ZIELDATEI" 2>/dev/null
@@ -603,7 +661,17 @@ sortiere_datei() {
         mv -- "$DATEI" "$ZIELDATEI" 2>/dev/null
       fi
       if [ $? -eq 0 ]; then
-        ! $KOPIEREN && log_schreiben "$LOGDATEI_PFAD" "$DATEI" "$ZIELDATEI" "$DATUM_LOG"
+        if ! $KOPIEREN; then
+          if [ -L "$ZIELDATEI" ] || ! [ -f "$ZIELDATEI" ]; then
+            echo -e "${ROT}Fehler: Ziel wurde unerwartet ersetzt oder ist keine regulaere Datei.${RESET}" >&2
+            return 3
+          fi
+          if ! log_schreiben "$LOGDATEI_PFAD" "$DATEI" "$ZIELDATEI" "$DATUM_LOG"; then
+            echo -e "${ROT}Fehler: Undo-Journal konnte nicht geschrieben werden – Rollback.${RESET}" >&2
+            mv -- "$ZIELDATEI" "$DATEI" 2>/dev/null || true
+            return 3
+          fi
+        fi
         local PFEIL="->"; $KOPIEREN && PFEIL="=>"
         echo -e "${GRUEN}OK: $DATEINAME  $PFEIL  $JAHR/$MONAT/${RESET}"
         json_event "move" source "$DATEI" destination "$ZIELDATEI" category "$JAHR/$MONAT" status "ok"
@@ -636,6 +704,11 @@ sortiere_datei() {
       json_event "preview" source "$DATEI" destination "$ZIELDATEI" category "$KATEGORIE" status "planned"
     else
       zielordner_sicher "$ZIELORDNER" || return 3
+      datei_unveraendert "$DATEI" "$QUELLE_SIG" || {
+        echo -e "${ROT}Fehler: Quelldatei wurde waehrend der Verarbeitung veraendert oder ersetzt.${RESET}" >&2
+        json_event "move" source "$DATEI" status "error" message "source changed during operation"
+        return 3
+      }
       mkdir -p "$ZIELORDNER" 2>/dev/null || { echo -e "${ROT}Fehler mkdir: $ZIELORDNER${RESET}"; return 3; }
       if $KOPIEREN; then
         cp -- "$DATEI" "$ZIELDATEI" 2>/dev/null
@@ -643,7 +716,17 @@ sortiere_datei() {
         mv -- "$DATEI" "$ZIELDATEI" 2>/dev/null
       fi
       if [ $? -eq 0 ]; then
-        ! $KOPIEREN && log_schreiben "$LOGDATEI_PFAD" "$DATEI" "$ZIELDATEI" "$DATUM_LOG"
+        if ! $KOPIEREN; then
+          if [ -L "$ZIELDATEI" ] || ! [ -f "$ZIELDATEI" ]; then
+            echo -e "${ROT}Fehler: Ziel wurde unerwartet ersetzt oder ist keine regulaere Datei.${RESET}" >&2
+            return 3
+          fi
+          if ! log_schreiben "$LOGDATEI_PFAD" "$DATEI" "$ZIELDATEI" "$DATUM_LOG"; then
+            echo -e "${ROT}Fehler: Undo-Journal konnte nicht geschrieben werden – Rollback.${RESET}" >&2
+            mv -- "$ZIELDATEI" "$DATEI" 2>/dev/null || true
+            return 3
+          fi
+        fi
         local PFEIL="->"; $KOPIEREN && PFEIL="=>"
         echo -e "${GRUEN}OK: $DATEINAME  $PFEIL  $KATEGORIE/${RESET}"
         json_event "move" source "$DATEI" destination "$ZIELDATEI" category "$KATEGORIE" status "ok"
@@ -664,6 +747,11 @@ sortiere_datei() {
     json_event "preview" source "$DATEI" destination "$ZIELDATEI" category "Sonstiges" status "planned"
   else
     zielordner_sicher "$ZIELORDNER" || return 3
+    datei_unveraendert "$DATEI" "$QUELLE_SIG" || {
+      echo -e "${ROT}Fehler: Quelldatei wurde waehrend der Verarbeitung veraendert oder ersetzt.${RESET}" >&2
+      json_event "move" source "$DATEI" status "error" message "source changed during operation"
+      return 3
+    }
     mkdir -p "$ZIELORDNER" 2>/dev/null || return 3
     if $KOPIEREN; then
       cp -- "$DATEI" "$ZIELDATEI" 2>/dev/null
@@ -671,7 +759,17 @@ sortiere_datei() {
       mv -- "$DATEI" "$ZIELDATEI" 2>/dev/null
     fi
     if [ $? -eq 0 ]; then
-      ! $KOPIEREN && log_schreiben "$LOGDATEI_PFAD" "$DATEI" "$ZIELDATEI" "$DATUM_LOG"
+      if ! $KOPIEREN; then
+        if [ -L "$ZIELDATEI" ] || ! [ -f "$ZIELDATEI" ]; then
+          echo -e "${ROT}Fehler: Ziel wurde unerwartet ersetzt oder ist keine regulaere Datei.${RESET}" >&2
+          return 3
+        fi
+        if ! log_schreiben "$LOGDATEI_PFAD" "$DATEI" "$ZIELDATEI" "$DATUM_LOG"; then
+          echo -e "${ROT}Fehler: Undo-Journal konnte nicht geschrieben werden – Rollback.${RESET}" >&2
+          mv -- "$ZIELDATEI" "$DATEI" 2>/dev/null || true
+          return 3
+        fi
+      fi
       echo -e "${GELB}Sonstiges: $DATEINAME${RESET}"
       json_event "move" source "$DATEI" destination "$ZIELDATEI" category "Sonstiges" status "ok"
       BERICHT_SONSTIGES=$((BERICHT_SONSTIGES+1))
@@ -695,11 +793,15 @@ sortiere_ordner() {
     echo -e "${BLAU}VORSCHAU-MODUS${RESET}"
   else
     echo -e "${GRUEN}Sortiere: $ORDNER${RESET}"
-    # BUGFIX: Log nur leeren wenn wirklich Dateien vorhanden sind
-    shopt -s nullglob; VORHANDENE=("$ORDNER"/*); shopt -u nullglob
-    if [ ${#VORHANDENE[@]} -gt 0 ]; then
-      : > "$LOGDATEI" 2>/dev/null || echo -e "${GELB}Warnung: Kein Schreibrecht fuer Log.${RESET}"
+    # v8.7: aktives Journal niemals vorzeitig zerstoeren.
+    # Die laufende Sortierung schreibt in ein Pending-Journal und commitet
+    # es erst am Ende atomar. Bei einem Crash bleibt das alte Journal intakt.
+    if [ -s "${LOGDATEI}.pending" ]; then
+      echo -e "${ROT}Fehler: Unabgeschlossenes Sortier-Journal vorhanden: ${LOGDATEI}.pending${RESET}" >&2
+      echo -e "${GELB}Bitte zuerst --undo ausfuehren oder das Pending-Journal sichern.${RESET}" >&2
+      return 1
     fi
+    : > "${LOGDATEI}.pending" 2>/dev/null || echo -e "${GELB}Warnung: Kein Schreibrecht fuer Journal.${RESET}"
   fi
   echo "--------------------------------------------"
 
@@ -716,7 +818,7 @@ sortiere_ordner() {
       local DATEINAME="${DATEI##*/}"
       [ "$DATEINAME" = ".sortier_log.txt" ] && continue
       local RET
-      sortiere_datei "$DATEI" "$ORDNER" "$DRYRUN" "$LOGDATEI" "$NACH_DATUM" "$DATUM_LOG"
+      sortiere_datei "$DATEI" "$ORDNER" "$DRYRUN" "${LOGDATEI}.pending" "$NACH_DATUM" "$DATUM_LOG"
       RET=$?
       case $RET in
         0) VERSCHOBEN=$((VERSCHOBEN+1)); BERICHT_VERSCHOBEN=$((BERICHT_VERSCHOBEN+1)) ;;
@@ -731,7 +833,7 @@ sortiere_ordner() {
     for DATEI in "$ORDNER"/*; do
       [ -f "$DATEI" ] || continue
       local RET
-      sortiere_datei "$DATEI" "$ORDNER" "$DRYRUN" "$LOGDATEI" "$NACH_DATUM" "$DATUM_LOG"
+      sortiere_datei "$DATEI" "$ORDNER" "$DRYRUN" "${LOGDATEI}.pending" "$NACH_DATUM" "$DATUM_LOG"
       RET=$?
       case $RET in
         0) VERSCHOBEN=$((VERSCHOBEN+1)); BERICHT_VERSCHOBEN=$((BERICHT_VERSCHOBEN+1)) ;;
@@ -745,11 +847,16 @@ sortiere_ordner() {
 
   echo "--------------------------------------------"
   if $DRYRUN; then
+    rm -f "${LOGDATEI}.pending"
     echo -e "${BLAU}Vorschau: $VERSCHOBEN sortiert, $SONSTIGES Sonstiges, $IGNORIERT ignoriert.${RESET}"
   else
     echo -e "${GRUEN}Fertig! $VERSCHOBEN sortiert, $SONSTIGES Sonstiges, $IGNORIERT ignoriert.${RESET}"
     [ $FEHLER_ANZ -gt 0 ] && echo -e "${ROT}Fehler: $FEHLER_ANZ${RESET}"
     echo -e "${GELB}Tipps: --undo | --log | --watch | --bericht${RESET}"
+    journal_commit "$LOGDATEI" || {
+      echo -e "${ROT}Fehler: Journal konnte nicht atomar uebernommen werden.${RESET}" >&2
+      return 1
+    }
     # Bericht nur im Einzel-Modus hier; Multi-Modus ruft bericht_schreiben separat auf
     if $BERICHT && ! $MULTI_MODUS; then
       bericht_schreiben "$ORDNER"
@@ -1001,7 +1108,9 @@ fi
 #  LOG ANZEIGEN  (BUGFIX: Tab-Separator)
 # ============================================
 if $ZEIG_LOG; then
+  LOGDATEI=$(journal_lesen_pfad "$LOGDATEI")
   [ ! -f "$LOGDATEI" ] && { echo -e "${ROT}Kein Log gefunden.${RESET}"; exit 1; }
+  journal_validieren "$LOGDATEI" || { echo -e "${ROT}Journal ist unvollstaendig oder beschaedigt – kein Log wird interpretiert.${RESET}"; exit 1; }
   echo -e "${CYAN}── Log der letzten Sortierung ──${RESET}"
   ANZAHL=0
   mapfile -d '' -t JOURNAL_FIELDS < "$LOGDATEI"
@@ -1031,11 +1140,14 @@ fi
 #  UNDO  (NUL-delimited journal)
 # ============================================
 if $UNDO; then
+  JOURNAL_BASIS="$LOGDATEI"
+  LOGDATEI=$(journal_lesen_pfad "$LOGDATEI")
   if [ ! -f "$LOGDATEI" ]; then
     echo -e "${GELB}Keine Undo-Daten vorhanden.${RESET}"
     exit 0
   fi
 
+  journal_validieren "$LOGDATEI" || { echo -e "${ROT}Undo abgebrochen: Journal ist unvollstaendig oder beschaedigt.${RESET}" >&2; exit 1; }
   echo -e "${CYAN}Undo: Letzte Sortierung wird rueckgaengig gemacht...${RESET}"
   TMP_LOG=$(mktemp 2>/dev/null) || { echo -e "${ROT}Fehler: mktemp fehlgeschlagen.${RESET}"; exit 1; }
   cp -- "$LOGDATEI" "$TMP_LOG" 2>/dev/null || { rm -f "$TMP_LOG"; echo -e "${ROT}Log konnte nicht gelesen werden.${RESET}"; exit 1; }
@@ -1047,6 +1159,11 @@ if $UNDO; then
     ZIEL_DATEI="${JOURNAL_FIELDS[$((J+1))]}"
     DATUM="${JOURNAL_FIELDS[$((J+2))]}"
     [ -z "$QUELLE" ] && continue
+    if [ -L "$ZIEL_DATEI" ]; then
+      echo -e "${ROT}Symlink als Undo-Quelle abgelehnt: ${ZIEL_DATEI##*/}${RESET}"
+      json_event "undo" source "$QUELLE" destination "$ZIEL_DATEI" status "error" message "destination is symlink"
+      FEHLER_UNDO=$((FEHLER_UNDO+1)); continue
+    fi
     if [ ! -e "$ZIEL_DATEI" ]; then
       echo -e "${ROT}Nicht vorhanden: ${ZIEL_DATEI##*/}${RESET}"
       json_event "undo" source "$QUELLE" destination "$ZIEL_DATEI" status "error" message "destination missing"
@@ -1055,6 +1172,11 @@ if $UNDO; then
     if [ -e "$QUELLE" ]; then
       echo -e "${ROT}Ziel bereits vorhanden, nichts ueberschrieben: ${QUELLE##*/}${RESET}"
       json_event "undo" source "$QUELLE" destination "$ZIEL_DATEI" status "conflict" message "source already exists"
+      FEHLER_UNDO=$((FEHLER_UNDO+1)); continue
+    fi
+    if [ -L "$QUELLE" ]; then
+      echo -e "${ROT}Undo-Ziel ist ein Symlink, Eintrag uebersprungen.${RESET}"
+      json_event "undo" source "$QUELLE" destination "$ZIEL_DATEI" status "error" message "source path is symlink"
       FEHLER_UNDO=$((FEHLER_UNDO+1)); continue
     fi
     if mv -- "$ZIEL_DATEI" "$QUELLE" 2>/dev/null; then
@@ -1071,7 +1193,7 @@ if $UNDO; then
   rm -f "$TMP_LOG"
   if [ "$FEHLER_UNDO" -eq 0 ]; then
     find "$ZIEL" -mindepth 1 -type d -empty -delete 2>/dev/null
-    rm -f "$LOGDATEI"
+    rm -f "$JOURNAL_BASIS" "${JOURNAL_BASIS}.pending"
     echo -e "${GRUEN}Undo abgeschlossen: $WIEDERHERGESTELLT wiederhergestellt.${RESET}"
     exit 0
   fi

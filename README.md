@@ -1,6 +1,6 @@
 # 📂 Datei-Sortierer
 
-Ein Bash-basierter Datei-Sortierer mit optionaler Tkinter-GUI. Version **v8.6** konzentriert sich auf Stabilität, sichere Pfadbehandlung, reproduzierbare Tests und eine gemeinsame Sortier-Engine für CLI und GUI.
+Ein Bash-basierter Datei-Sortierer mit optionaler Tkinter-GUI. Version **v8.7** konzentriert sich auf Stabilität, sichere Pfadbehandlung, reproduzierbare Tests und eine gemeinsame Sortier-Engine für CLI und GUI.
 
 ## Kernfunktionen
 
@@ -65,7 +65,7 @@ Die mitgelieferten Profile verwenden dasselbe Format und werden von der Bash-Eng
 
 ## JSON-API
 
-v8.6 ergänzt einen stabilen Maschinenzugang über `api.py`. Die API verwendet die Bash-Engine weiterhin als einzige Sortierlogik und liefert strukturierte JSON-Antworten mit Ereignissen.
+v8.7 ergänzt einen stabilen Maschinenzugang über `api.py`. Die API verwendet die Bash-Engine weiterhin als einzige Sortierlogik und liefert strukturierte JSON-Antworten mit Ereignissen.
 
 ```bash
 python3 api.py preview ~/Downloads
@@ -139,11 +139,13 @@ Der Testumfang umfasst aktuell:
 - rekursive Sortierung
 - Schutz gegen erneute Verarbeitung erzeugter Zielordner
 - maschinenlesbare JSON-Fehlerfälle
-- Konfigurationsvalidierung und atomisches Speichern
+- Konfigurationsvalidierung und crash-sicheres atomisches Speichern
+- Pending-Journal und Integritaetspruefung beim Undo
+- TOCTOU-/Race-Schutz fuer Quelldateien und Symlink-Ablehnung beim Undo
 - GUI-Konfigurationseditor über die JSON-API
 - Watch-Engine mit Event- und Polling-Fallback
 
-Zusätzlich werden die JSON-API, Sonderzeichen im Journal und der NUL-delimitierte Log-Reader regressionsgeprüft.
+Zusätzlich werden die JSON-API, Sonderzeichen im Journal, Pending-Journals, beschaedigte Journals und der NUL-delimitierte Log-Reader regressionsgeprüft.
 
 ## Projektstruktur
 
@@ -179,3 +181,14 @@ Watch-Funktionen und Cronjobs hängen von den jeweiligen Betriebssystemwerkzeuge
 ## Lizenz
 
 MIT License.
+
+
+## v8.7 Security & Reliability
+
+v8.7 fuehrt ein zweistufiges Journal ein: Eine laufende Sortierung schreibt zuerst in `.sortier_log.txt.pending`. Erst nach dem Sortierlauf wird dieses Journal atomar als aktives Undo-Journal uebernommen. Dadurch wird ein bestehendes funktionierendes Journal bei einem Prozessabbruch nicht vorzeitig zerstoert.
+
+Vor einer Dateioperation wird die Quelldatei erneut auf Existenz, Symlink-Status und eine Signatur aus Device/Inode/Groesse/mtime geprueft. Aenderungen zwischen Erkennung und Operation fuehren zum Abbruch der betreffenden Datei.
+
+Undo und Log-Anzeige validieren das NUL-delimitierte Journal und lehnen unvollstaendige Datensaetze ab. Symlinks werden beim Undo nicht als wiederherzustellende Quelldateien akzeptiert.
+
+Die JSON-API speichert Konfigurationen weiterhin atomar, verwendet dafuer aber einen eindeutigen temporaeren Dateinamen im Zielverzeichnis, synchronisiert den Inhalt vor dem Replace und verweigert das direkte Ersetzen eines bestehenden Config-Symlinks.

@@ -2,7 +2,7 @@
 
 ## Supported Versions
 
-The current development line is v8.4. Security fixes are applied to the active development branch and released with the next stable version.
+The current development line is v8.7. Security fixes are applied to the active development branch and released with the next stable version.
 
 | Version | Supported |
 | --- | --- |
@@ -21,6 +21,8 @@ The project treats the following as security-sensitive:
 - HTML report generation
 - temporary files
 - configuration/profile parsing
+- journal integrity and crash recovery
+- TOCTOU/race-condition protection
 
 Security fixes are regression-tested before being merged into main.
 

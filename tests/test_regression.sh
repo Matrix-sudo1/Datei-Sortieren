@@ -166,4 +166,27 @@ grep -Fq 'def _baue_tab_config(self):' "$ROOT/gui.py" || fail "Config-GUI fehlt"
 grep -Fq 'self._config_api(["config", self._config_datei()])' "$ROOT/gui.py" || fail "Config-GUI nutzt API nicht"
 grep -Fq 'config-save' "$ROOT/gui.py" || fail "Config-GUI Save fehlt"
 
-echo "PASS: v8.6 configuration hardening tests"
+
+
+echo "[13/13] v8.7 Journal-Crashschutz und beschaedigte Journals"
+mkdir -p "$TMP/journal"
+printf 'old-source\0old-target\0old-date\0' > "$TMP/journal/.sortier_log.txt"
+printf 'broken-source\0broken-target\0' >> "$TMP/journal/.sortier_log.txt"
+if bash "$SCRIPT" "$TMP/journal" --undo >/dev/null 2>&1; then
+  fail "Beschaedigtes Journal wurde akzeptiert"
+fi
+[ -s "$TMP/journal/.sortier_log.txt" ] || fail "Beschaedigtes Journal wurde geloescht"
+printf 'pending-source\0pending-target\0pending-date\0' > "$TMP/journal/.sortier_log.txt.pending"
+UNDO_PENDING_OUTPUT=$(bash "$SCRIPT" "$TMP/journal" --undo 2>&1 || true)
+printf '%s' "$UNDO_PENDING_OUTPUT" | grep -q "Nicht vorhanden" || fail "Pending-Journal wurde nicht als aktives Journal erkannt"
+assert_file "$TMP/journal/.sortier_log.txt.pending"
+
+echo "[14/14] v8.7 Config-Symlink-Schutz"
+mkdir -p "$TMP/config-symlink"
+printf 'Bilder=jpg\n' > "$TMP/config-symlink/real.txt"
+ln -s "$TMP/config-symlink/real.txt" "$TMP/config-symlink/link.txt"
+SYMLINK_SAVE=$(python3 "$ROOT/api.py" config-save "$TMP/config-symlink/link.txt" --content 'Bilder=png' || true)
+printf '%s' "$SYMLINK_SAVE" | python3 -c 'import json,sys; p=json.load(sys.stdin); assert not p["success"] and p["exit_code"] == 2, p'
+grep -q 'Bilder=jpg' "$TMP/config-symlink/real.txt" || fail "Symlink-Ziel wurde beim Config-Save veraendert"
+
+echo "PASS: v8.7 security and reliability tests"
