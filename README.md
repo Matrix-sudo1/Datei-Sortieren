@@ -76,7 +76,7 @@ python3 api.py undo ~/Downloads
 python3 api.py log ~/Downloads
 ```
 
-Intern nutzt die Engine optionale **NDJSON-Ereignisse** (`--json`). Dadurch muss die GUI keine menschenlesbare CLI-Ausgabe mehr parsen. JSON Lines eignet sich besonders für zeilenweise verarbeitbare Ereignisse und Streaming-Schnittstellen. citeturn1search0
+Intern nutzt die Engine optionale **NDJSON-Ereignisse** (`--json`). Dadurch muss die GUI keine menschenlesbare CLI-Ausgabe mehr parsen. JSON Lines eignet sich besonders für zeilenweise verarbeitbare Ereignisse und Streaming-Schnittstellen.
 
 ## GUI
 
