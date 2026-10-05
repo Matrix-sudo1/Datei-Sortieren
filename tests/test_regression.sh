@@ -372,3 +372,25 @@ grep -Fq 'Als Regel übernehmen' "$ROOT/gui.py" || fail "GUI Lernregel-Aktion fe
 grep -Fq 'learning-rule' "$ROOT/api.py" || fail "Learning-Rule API fehlt"
 grep -Fq 'load_learning_rules' "$ROOT/intelligent.py" || fail "Learning Rules werden nicht angewendet"
 echo "PASS: v9.0 Phase 8 learning rules"
+
+echo "[27/27] v9.0 Phase 9 Rule Management & Explainability"
+mkdir -p "$TMP/learning-rules-management"
+printf "unknown" > "$TMP/learning-rules-management/custom.zzz"
+ADD_MGMT=$(python3 "$ROOT/api.py" intelligent-rule-add "$TMP/learning-rules-management" --source extension --pattern zzz --category Code --id mgmt-rule)
+printf "%s" "$ADD_MGMT" | python3 -c 'import json,sys; p=json.load(sys.stdin); assert p["success"], p'
+DISABLE_MGMT=$(python3 "$ROOT/api.py" intelligent-rule-set "$TMP/learning-rules-management" --id mgmt-rule --enabled false)
+printf "%s" "$DISABLE_MGMT" | python3 -c 'import json,sys; p=json.load(sys.stdin); assert p["success"] and p["events"][0]["enabled"] is False, p'
+DISABLED_PREVIEW=$(python3 "$ROOT/api.py" intelligent-preview "$TMP/learning-rules-management")
+printf "%s" "$DISABLED_PREVIEW" | python3 -c 'import json,sys; p=json.load(sys.stdin); e=next(e for e in p["events"] if e.get("event")=="intelligent"); assert e["signal"]=="fallback", p'
+ENABLE_MGMT=$(python3 "$ROOT/api.py" intelligent-rule-set "$TMP/learning-rules-management" --id mgmt-rule --enabled true)
+printf "%s" "$ENABLE_MGMT" | python3 -c 'import json,sys; p=json.load(sys.stdin); assert p["success"] and p["events"][0]["enabled"] is True, p'
+ENABLED_PREVIEW=$(python3 "$ROOT/api.py" intelligent-preview "$TMP/learning-rules-management")
+printf "%s" "$ENABLED_PREVIEW" | python3 -c 'import json,sys; p=json.load(sys.stdin); e=next(e for e in p["events"] if e.get("event")=="intelligent"); assert e["signal"]=="learning_rule" and e["rule_id"]=="mgmt-rule" and e["category"]=="Code", p'
+CONFLICT=$(python3 "$ROOT/api.py" intelligent-rule-add "$TMP/learning-rules-management" --source extension --pattern zzz --category Bilder --id conflicting-rule || true)
+printf "%s" "$CONFLICT" | python3 -c 'import json,sys; p=json.load(sys.stdin); assert not p["success"] and p["exit_code"]==2, p'
+REPORT_MGMT=$(python3 "$ROOT/api.py" intelligent-sort "$TMP/learning-rules-management")
+printf "%s" "$REPORT_MGMT" | python3 -c 'import json,sys; p=json.load(sys.stdin); assert p["success"], p'
+python3 -c 'import json,sys; p=json.load(open(sys.argv[1])); e=p["files"][0]; assert e["signal"]=="learning_rule" and e["rule_id"]=="mgmt-rule" and "explicitly maps" in e["reason"]' "$TMP/learning-rules-management/.datei-sortierer/intelligent-report.json"
+grep -Fq 'intelligent-rule-set' "$ROOT/api.py" || fail "Rule enable/disable API fehlt"
+grep -Fq 'Lernregeln' "$ROOT/gui.py" || fail "GUI Lernregelverwaltung fehlt"
+echo "PASS: v9.0 Phase 9 rule management"

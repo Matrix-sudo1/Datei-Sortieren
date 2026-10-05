@@ -24,7 +24,7 @@ CONFIDENCE_REVIEW = 0.65
 RULES_FILE_NAME = "learning-rules.json"
 RULES_VERSION = 1
 RULE_ID_RE = re.compile(r"^[A-Za-z0-9_-]{1,64}$")
-RULE_PATTERN_RE = re.compile(r"^[^\\x00\\r\\n]{1,255}$")
+RULE_PATTERN_RE = re.compile(r"^[^\x00\r\n]{1,255}$")
 
 
 def confidence_policy(confidence: float) -> dict[str, str]:
@@ -155,8 +155,24 @@ def add_learning_rule(folder: str | Path, rule: dict, categories: dict[str, set[
     normalized = _validate_rule(rule, categories)
     if any(existing["id"] == normalized["id"] for existing in rules):
         raise ValueError(f"rule already exists: {normalized['id']}")
+    if any(existing["source"] == normalized["source"] and existing["pattern"] == normalized["pattern"] for existing in rules):
+        raise ValueError("rule with the same source and pattern already exists")
     rules.append(normalized)
     return normalized, save_learning_rules(folder, rules, categories)
+
+
+def set_learning_rule_enabled(folder: str | Path, rule_id: str, enabled: bool, categories: dict[str, set[str]]) -> dict:
+    rules = load_learning_rules(folder, categories)
+    found = None
+    for rule in rules:
+        if rule["id"] == rule_id:
+            rule["enabled"] = bool(enabled)
+            found = rule
+            break
+    if found is None:
+        raise ValueError(f"rule not found: {rule_id}")
+    save_learning_rules(folder, rules, categories)
+    return found
 
 
 def remove_learning_rule(folder: str | Path, rule_id: str, categories: dict[str, set[str]]) -> Path:

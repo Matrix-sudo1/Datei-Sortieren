@@ -445,6 +445,7 @@ class DateiSortiererApp:
         self._baue_tab_cronjob()
         self._baue_tab_config()
         self._baue_tab_automation()
+        self._baue_tab_regeln()
 
         self._tab_wechseln("sortieren")
         self._baue_statusbar(aussen)
@@ -508,7 +509,8 @@ class DateiSortiererApp:
                 ("verlauf",     "🕐  Verlauf"),
                 ("cronjob",     "⏰  Geplant"),
                 ("config",      "⚙  Konfiguration"),
-                ("automation", "🤖  Automation")]
+                ("automation", "🤖  Automation"),
+                ("regeln", "🧠  Lernregeln")]
         for key, label in tabs:
             btn = tk.Button(
                 self.tab_rahmen, text=label, font=FONT_TAB,
@@ -535,9 +537,109 @@ class DateiSortiererApp:
              "verlauf":     self.frame_verlauf,
              "cronjob":     self.frame_cronjob,
              "config":      self.frame_config,
-             "automation": self.frame_automation}[key].pack(fill="both", expand=True)
+             "automation": self.frame_automation,
+             "regeln": self.frame_regeln}[key].pack(fill="both", expand=True)
         except tk.TclError:
             pass
+
+    # ------------------------------------------
+    #  TAB: LERNREGELN
+    # ------------------------------------------
+    def _baue_tab_regeln(self):
+        F = self._F
+        self.frame_regeln = tk.Frame(self.tab_inhalt, bg=F["card"])
+        self._reg(self.frame_regeln, "card")
+        header = tk.Frame(self.frame_regeln, bg=F["card"])
+        header.pack(fill="x", pady=(10, 8))
+        self._reg(header, "card")
+        tk.Label(header, text="🧠  Lernregeln", font=FONT_TITEL,
+                 bg=F["card"], fg=F["text"]).pack(side="left")
+        tk.Button(header, text="↻ Aktualisieren", font=FONT_BOLD,
+                  bg=F["akzent2"], fg=F["btn_text"], relief="flat",
+                  command=self._lernregeln_laden).pack(side="right")
+        tk.Label(self.frame_regeln,
+                 text="Explizite Regeln haben Vorrang vor der normalen Klassifizierung. Deaktivierte Regeln bleiben gespeichert.",
+                 font=FONT, bg=F["card"], fg=F["text_dim"], anchor="w",
+                 wraplength=760, justify="left").pack(fill="x", pady=(0, 10))
+        self.regeln_frame = tk.Frame(self.frame_regeln, bg=F["card2"])
+        self.regeln_frame.pack(fill="both", expand=True)
+        self._reg(self.regeln_frame, "card2")
+        self.regeln_status = tk.Label(self.frame_regeln, text="Ordner auswählen und Aktualisieren klicken.",
+                                      font=FONT_KLEIN, bg=F["card"], fg=F["text_dim"], anchor="w")
+        self.regeln_status.pack(fill="x", pady=8)
+        self._lernregeln_laden()
+
+    def _lernregeln_laden(self):
+        for w in self.regeln_frame.winfo_children():
+            w.destroy()
+        pfad = self.ordner_pfad.get()
+        if not pfad or not os.path.isdir(pfad):
+            self.regeln_status.configure(text="Kein gültiger Zielordner ausgewählt.", fg=self._F["text_dim"])
+            return
+        try:
+            proc = subprocess.run(
+                [sys.executable, self.api_pfad, "intelligent-rules", pfad],
+                stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+                text=True, encoding="utf-8", errors="replace", check=False)
+            payload = json.loads(proc.stdout)
+            if not payload.get("success"):
+                raise ValueError("; ".join(e.get("message", "Fehler") for e in payload.get("events", [])))
+            rules = [e for e in payload.get("events", []) if e.get("event") == "learning-rule"]
+            if not rules:
+                tk.Label(self.regeln_frame, text="Noch keine Lernregeln gespeichert.",
+                         font=FONT, bg=self._F["card2"], fg=F["text_dim"], pady=25).pack()
+            for i, rule in enumerate(rules):
+                self._lernregel_zeile(rule, i)
+            self.regeln_status.configure(text=f"{len(rules)} Lernregel(n) geladen.", fg=F["gruen"])
+        except Exception as exc:
+            self.regeln_status.configure(text=f"❌ {exc}", fg=F["rot"])
+
+    def _lernregel_zeile(self, rule, i):
+        F = self._F
+        bg = F["tabelle_z1"] if i % 2 == 0 else F["tabelle_z2"]
+        row = tk.Frame(self.regeln_frame, bg=bg, highlightbackground=F["border"], highlightthickness=1)
+        row.pack(fill="x", padx=6, pady=3)
+        state = "🟢 Aktiv" if rule.get("enabled") else "⚪ Deaktiviert"
+        label = f'{state}   {rule.get("source_label", rule.get("source"))}: {rule.get("pattern")}  →  {rule.get("category")}'
+        tk.Label(row, text=label, font=FONT, bg=bg, fg=F["text"], anchor="w").pack(side="left", fill="x", expand=True, padx=10, pady=8)
+        tk.Button(row, text="Aktivieren" if not rule.get("enabled") else "Deaktivieren",
+                  font=FONT_KLEIN, bg=F["akzent2"], fg=F["btn_text"], relief="flat",
+                  command=lambda rid=rule["id"], en=not rule.get("enabled"): self._lernregel_status(rid, en)).pack(side="left", padx=4)
+        tk.Button(row, text="Löschen", font=FONT_KLEIN, bg=F["rot"], fg=F["btn_text"], relief="flat",
+                  command=lambda rid=rule["id"]: self._lernregel_loeschen(rid)).pack(side="left", padx=8)
+
+    def _lernregel_status(self, rule_id, enabled):
+        pfad = self.ordner_pfad.get()
+        try:
+            proc = subprocess.run(
+                [sys.executable, self.api_pfad, "intelligent-rule-set", pfad,
+                 "--id", rule_id, "--enabled", "true" if enabled else "false"],
+                stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+                text=True, encoding="utf-8", errors="replace", check=False)
+            payload = json.loads(proc.stdout)
+            if not payload.get("success"):
+                raise ValueError("; ".join(e.get("message", "Fehler") for e in payload.get("events", [])))
+            self._lernregeln_laden()
+            self._intelligent_vorschau()
+        except Exception as exc:
+            messagebox.showerror("Lernregel", str(exc))
+
+    def _lernregel_loeschen(self, rule_id):
+        pfad = self.ordner_pfad.get()
+        if not messagebox.askyesno("Lernregel löschen", f"Regel '{rule_id}' wirklich löschen?"):
+            return
+        try:
+            proc = subprocess.run(
+                [sys.executable, self.api_pfad, "intelligent-rule-remove", pfad, "--id", rule_id],
+                stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+                text=True, encoding="utf-8", errors="replace", check=False)
+            payload = json.loads(proc.stdout)
+            if not payload.get("success"):
+                raise ValueError("; ".join(e.get("message", "Fehler") for e in payload.get("events", [])))
+            self._lernregeln_laden()
+            self._intelligent_vorschau()
+        except Exception as exc:
+            messagebox.showerror("Lernregel", str(exc))
 
     # ------------------------------------------
     #  TAB: SORTIEREN
