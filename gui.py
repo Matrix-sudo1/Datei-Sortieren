@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # ============================================
-#  Datei-Sortierer GUI v8.5
+#  Datei-Sortierer GUI v8.6
 #  NEU:
 #  - Drag & Drop (Ordner ins Fenster ziehen)
 #  - Dark / Light Theme Umschalter
@@ -128,7 +128,7 @@ def _parse_drop(data):
 class DateiSortiererApp:
     def __init__(self, root):
         self.root = root
-        self.root.title("Datei-Sortierer v8.5")
+        self.root.title("Datei-Sortierer v8.6")
         self.root.geometry("900x780")
         self.root.minsize(800, 660)
         self.root.resizable(True, True)
@@ -522,7 +522,7 @@ class DateiSortiererApp:
                     bg=F["tab_aktiv"] if k == key else F["nav"],
                     fg=F["text"] if k == key else F["text_dim"])
             for frame in [self.frame_sortieren, self.frame_statistiken,
-                          self.frame_verlauf, self.frame_cronjob]:
+                          self.frame_verlauf, self.frame_cronjob, self.frame_config]:
                 frame.pack_forget()
             {"sortieren":   self.frame_sortieren,
              "statistiken": self.frame_statistiken,
