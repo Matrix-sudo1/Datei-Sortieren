@@ -1,8 +1,8 @@
-# Security Patches – v8.2
+# Security Patches – v8.4
 
-This document records the security hardening included in the v8.2 refactoring branch.
+This document records the security hardening included through the v8.4 hardening branch.
 
-## v8.2
+## v8.4
 
 ### P1 – Cronjob command construction
 Cronjob paths are now passed through shell-safe single-quote escaping before being written to crontab. Newline and non-printable characters are rejected as an additional validation layer.
@@ -28,7 +28,7 @@ Custom category names are rejected when they contain path separators, traversal 
 ### P8 – Undo safety
 Undo refuses to overwrite an already existing source path.
 
-## Remaining hardening work
+## Historical v8.2 hardening
 
 The following are deliberately tracked for subsequent v8.x work:
 
@@ -37,3 +37,11 @@ The following are deliberately tracked for subsequent v8.x work:
 - add dedicated regression tests for special filenames, symlinks, duplicate handling, watch mode and cronjob escaping
 - protect destination directories against pre-existing symlink redirection
 - add machine-readable CLI output for GUI integration beyond the current dry-run preview
+
+## v8.4 hardening
+
+### P9 – Machine-readable API errors
+Invalid folders and argument errors now return structured JSON with an error event and exit code instead of leaking argparse text to API consumers.
+
+### P10 – Regression matrix
+The regression suite now validates Bash/Python syntax, JSON API error handling, and the v8.3 watch engine in the same CI gate.
