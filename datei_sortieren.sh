@@ -984,21 +984,21 @@ if $UNDO; then
     DATUM="${JOURNAL_FIELDS[$((J+2))]}"
     [ -z "$QUELLE" ] && continue
     if [ ! -e "$ZIEL_DATEI" ]; then
-      echo -e "${ROT}Nicht vorhanden: ${ZIEL_DATEI##*/}${RESET}
+      echo -e "${ROT}Nicht vorhanden: ${ZIEL_DATEI##*/}${RESET}"
       json_event "undo" source "$QUELLE" destination "$ZIEL_DATEI" status "error" message "destination missing"
       FEHLER_UNDO=$((FEHLER_UNDO+1)); continue
     fi
     if [ -e "$QUELLE" ]; then
-      echo -e "${ROT}Ziel bereits vorhanden, nichts ueberschrieben: ${QUELLE##*/}${RESET}
+      echo -e "${ROT}Ziel bereits vorhanden, nichts ueberschrieben: ${QUELLE##*/}${RESET}"
       json_event "undo" source "$QUELLE" destination "$ZIEL_DATEI" status "conflict" message "source already exists"
       FEHLER_UNDO=$((FEHLER_UNDO+1)); continue
     fi
     if mv -- "$ZIEL_DATEI" "$QUELLE" 2>/dev/null; then
-      echo -e "${GRUEN}Wiederhergestellt: ${QUELLE##*/}${RESET}
+      echo -e "${GRUEN}Wiederhergestellt: ${QUELLE##*/}${RESET}"
       json_event "undo" source "$QUELLE" destination "$ZIEL_DATEI" status "ok"
       WIEDERHERGESTELLT=$((WIEDERHERGESTELLT+1))
     else
-      echo -e "${ROT}Fehler: ${QUELLE##*/}${RESET}
+      echo -e "${ROT}Fehler: ${QUELLE##*/}${RESET}"
       json_event "undo" source "$QUELLE" destination "$ZIEL_DATEI" status "error" message "move failed"
       FEHLER_UNDO=$((FEHLER_UNDO+1))
     fi
