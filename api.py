@@ -321,7 +321,7 @@ def automation_profiles() -> list[dict]:
 
 
 def build_parser() -> argparse.ArgumentParser:
-    parser = JsonArgumentParser(description="JSON API for Datei-Sortierer v8.5")
+    parser = JsonArgumentParser(description="JSON API for Datei-Sortierer v8.8")
     sub = parser.add_subparsers(dest="command", required=True)
 
     def common(p: argparse.ArgumentParser) -> None:
