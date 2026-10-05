@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # ============================================
-#  Datei-Sortierer GUI v8.8
+#  Datei-Sortierer GUI v9.0
 #  NEU:
 #  - Drag & Drop (Ordner ins Fenster ziehen)
 #  - Dark / Light Theme Umschalter
@@ -128,7 +128,7 @@ def _parse_drop(data):
 class DateiSortiererApp:
     def __init__(self, root):
         self.root = root
-        self.root.title("Datei-Sortierer v8.8")
+        self.root.title("Datei-Sortierer v9.0")
         self.root.geometry("900x780")
         self.root.minsize(800, 660)
         self.root.resizable(True, True)
@@ -139,6 +139,7 @@ class DateiSortiererApp:
         self.unterordner_var = tk.BooleanVar(value=False)
         self.notify_var      = tk.BooleanVar(value=False)
         self.bericht_var     = tk.BooleanVar(value=False)
+        self._intelligent_laeuft = False
         self._theme_name     = "dark"
         self._aktiver_tab    = "sortieren"   # Fix 5: Tab-Tracking für Theme
         self._zerstoert      = False
@@ -621,6 +622,13 @@ class DateiSortiererApp:
             relief="flat", cursor="hand2", pady=12,
             command=self._vorschau_laden)
         self.vorschau_btn.pack(side="left", fill="x", expand=True, padx=(0,6))
+        self.intelligent_btn = tk.Button(
+            btn_leiste, text="🧠  Intelligent",
+            font=FONT_BTN, bg=F["akzent"], fg=F["btn_text"],
+            activebackground="#5530a0", activeforeground=F["btn_text"],
+            relief="flat", cursor="hand2", pady=12,
+            command=self._intelligent_vorschau)
+        self.intelligent_btn.pack(side="left", fill="x", expand=True, padx=(0,6))
 
         self.start_btn = tk.Button(
             btn_leiste, text="🚀  Sortieren starten",
@@ -1261,6 +1269,94 @@ class DateiSortiererApp:
                 except tk.TclError: pass
             self._nach(_upd)
         threading.Thread(target=_t, daemon=True).start()
+
+    def _intelligent_vorschau(self):
+        """Zeigt deterministische Klassifizierungsvorschlaege ueber die JSON API."""
+        if not self.ordner_pfad.get():
+            self._ordner_waehlen()
+            return
+        if self.laeuft or self._intelligent_laeuft:
+            return
+        pfad = self.ordner_pfad.get()
+        if not os.path.isdir(pfad):
+            messagebox.showerror("Fehler", f"Ordner nicht gefunden:\n{pfad}")
+            return
+        self._intelligent_laeuft = True
+        self.intelligent_btn.configure(state="disabled")
+        self.status_text.configure(text="🧠  Analysiere Dateien intelligent...", fg=self._F["gelb"])
+        self._tabelle_leeren()
+
+        def _t():
+            rows, error = [], None
+            try:
+                args = [sys.executable, self.api_pfad, "intelligent-preview", pfad]
+                if self.unterordner_var.get():
+                    args.append("--recursive")
+                proc = subprocess.run(
+                    args, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+                    text=True, encoding="utf-8", errors="replace", check=False)
+                payload = json.loads(proc.stdout)
+                for event in payload.get("events", []):
+                    if event.get("event") != "intelligent":
+                        continue
+                    source = event.get("source", "")
+                    rows.append((
+                        Path(source).name,
+                        event.get("category", "Sonstiges"),
+                        f"{float(event.get('confidence', 0.0)):.0%}",
+                        event.get("reason", "")
+                    ))
+                if not payload.get("success", False):
+                    error = next((e.get("message", "Intelligent Preview fehlgeschlagen.")
+                                  for e in payload.get("events", [])
+                                  if e.get("event") == "error"),
+                                 "Intelligent Preview fehlgeschlagen.")
+            except Exception as exc:
+                error = f"❌ Intelligent Preview fehlgeschlagen: {exc}"
+            finally:
+                self._intelligent_laeuft = False
+
+            def _upd():
+                if self._zerstoert:
+                    return
+                try:
+                    self._tabelle_leeren()
+                    if error:
+                        tk.Label(self.tabelle_frame, text=error, font=FONT,
+                                 bg=self._F["tabelle_z1"], fg=self._F["rot"], pady=20).pack()
+                        self.status_text.configure(text=error, fg=self._F["rot"])
+                    elif not rows:
+                        tk.Label(self.tabelle_frame, text="Keine analysierbaren Dateien.",
+                                 font=FONT, bg=self._F["tabelle_z1"],
+                                 fg=self._F["text_dim"], pady=20).pack()
+                        self.status_text.configure(text="ℹ️  Keine analysierbaren Dateien.", fg=self._F["text_dim"])
+                    else:
+                        for i, row in enumerate(rows):
+                            self._intelligent_zeile(*row, i)
+                        high = sum(1 for r in rows if float(r[2].strip("%")) >= 85)
+                        self.status_text.configure(
+                            text=f"🧠  {len(rows)} Datei(en) analysiert – {high} mit hoher Konfidenz.",
+                            fg=self._F["gruen"])
+                    self.intelligent_btn.configure(state="normal")
+                except tk.TclError:
+                    pass
+            self._nach(_upd)
+
+        threading.Thread(target=_t, daemon=True).start()
+
+    def _intelligent_zeile(self, dateiname, kategorie, konfidenz, grund, i):
+        F = self._F
+        try:
+            bg = F["tabelle_z1"] if i % 2 == 0 else F["tabelle_z2"]
+            zeile = tk.Frame(self.tabelle_frame, bg=bg)
+            zeile.pack(fill="x")
+            for text, breite in [
+                (dateiname, 22), (kategorie, 16), (konfidenz, 10), (grund, 48)
+            ]:
+                tk.Label(zeile, text=text, font=FONT, bg=bg, fg=F["text"],
+                         width=breite, anchor="w", padx=8, pady=6).pack(side="left")
+        except tk.TclError:
+            pass
 
     def _sortieren_starten(self):
         if not self.ordner_pfad.get():
