@@ -152,6 +152,7 @@ hilfe() {
   echo "  --nach-datum        Nach Erstelldatum sortieren (Jahr/Monat)"
   echo "  --duplikate         Duplikate suchen"
   echo "  --config DATEI      Eigene Konfiguration"
+  echo "  --intelligent-plan DATEI  bestaetigten Intelligent-Sort-Plan ausfuehren"
   echo "  --help              Diese Hilfe"
   echo ""
   echo "v6.0+:"
@@ -189,6 +190,7 @@ KOPIEREN=false; UNTERORDNER=false
 PROFIL=""; PROFIL_LIST=false
 CRONJOB_UHRZEIT=""; CRONJOB_LIST=false; CRONJOB_REMOVE=false
 BERICHT=false; BERICHT_DATEI=""
+INTELLIGENT_PLAN=""
 BASIS_DIR="$(cd "$(dirname "$0")" && pwd)"
 CONFIGDATEI="$BASIS_DIR/config.txt"
 IGNOREDATEI="$BASIS_DIR/ignore.txt"
@@ -210,6 +212,7 @@ while [ $i -lt ${#ARGS[@]} ]; do
   if [ -n "$SKIP_NEXT" ]; then
     case $SKIP_NEXT in
       config)   CONFIGDATEI="$ARG" ;;
+      intelligent_plan) INTELLIGENT_PLAN="$ARG" ;;
       ignore)   IGNOREDATEI="$ARG" ;;
       profil)   PROFIL="$ARG" ;;
       interval)
@@ -245,6 +248,7 @@ while [ $i -lt ${#ARGS[@]} ]; do
     --cronjob-list)   CRONJOB_LIST=true ;;
     --cronjob-remove) CRONJOB_REMOVE=true ;;
     --cronjob)        SKIP_NEXT="cronjob_zeit" ;;
+    --intelligent-plan) SKIP_NEXT="intelligent_plan" ;;
     --bericht)
       BERICHT=true
       NAECHSTER="${ARGS[$((i+1))]:-}"
@@ -604,6 +608,7 @@ datei_unveraendert() {
 sortiere_datei() {
   local DATEI="$1" ZIEL_BASIS="$2" DRYRUN_FLAG="$3"
   local LOGDATEI_PFAD="$4" DATUM_FLAG="$5" DATUM_LOG="$6"
+  local PLAN_KATEGORIE="${7:-}" PLAN_SIG="${8:-}"
 
   [ -f "$DATEI" ] || return 2
 
@@ -616,6 +621,11 @@ sortiere_datei() {
 
   local QUELLE_SIG
   QUELLE_SIG=$(datei_signatur "$DATEI") || return 2
+  if [ -n "$PLAN_SIG" ] && [ "$QUELLE_SIG" != "$PLAN_SIG" ]; then
+    echo -e "${ROT}Fehler: Intelligent-Plan ist fuer eine andere Dateiversion bestimmt.${RESET}" >&2
+    json_event "move" source "$DATEI" status "error" message "intelligent plan source changed"
+    return 3
+  fi
 
   # OPT: ${##*/} statt $(basename)
   local DATEINAME="${DATEI##*/}"
@@ -687,7 +697,7 @@ sortiere_datei() {
   local ENDUNG_KLEIN=""
   [[ "$DATEINAME" == *.* ]] && ENDUNG_KLEIN="${DATEINAME##*.}" && ENDUNG_KLEIN="${ENDUNG_KLEIN,,}"
 
-  local KATEGORIE="${EXT_MAP[$ENDUNG_KLEIN]:-}"
+  local KATEGORIE="${PLAN_KATEGORIE:-${EXT_MAP[$ENDUNG_KLEIN]:-}}"
 
   if [ -n "$KATEGORIE" ]; then
     local ZIELORDNER="$ZIEL_BASIS/$KATEGORIE"
@@ -805,7 +815,31 @@ sortiere_ordner() {
   fi
   echo "--------------------------------------------"
 
-  if $UNTERORDNER; then
+  if [ -n "$INTELLIGENT_PLAN" ]; then
+    if [ ! -f "$INTELLIGENT_PLAN" ]; then
+      echo -e "${ROT}Fehler: Intelligent-Plan nicht gefunden: $INTELLIGENT_PLAN${RESET}" >&2
+      return 1
+    fi
+    local PLAN_SOURCE PLAN_CATEGORY PLAN_SIG PLAN_RET
+    while IFS= read -r -d "" PLAN_SOURCE && IFS= read -r -d "" PLAN_CATEGORY && IFS= read -r -d "" PLAN_SIG; do
+      case "$PLAN_CATEGORY" in
+        Sonstiges) ;;
+        *) [[ "$PLAN_CATEGORY" =~ ^[A-Za-z0-9_-]+$ ]] || { echo -e "${ROT}Fehler: Ungueltige Plan-Kategorie.${RESET}" >&2; return 1; } ;;
+      esac
+      case "$PLAN_SOURCE" in
+        "$ORDNER"/*) ;;
+        *) echo -e "${ROT}Fehler: Intelligent-Plan verweist ausserhalb des Zielordners.${RESET}" >&2; return 1 ;;
+      esac
+      sortiere_datei "$PLAN_SOURCE" "$ORDNER" "$DRYRUN" "${LOGDATEI}.pending" "$NACH_DATUM" "$DATUM_LOG" "$PLAN_CATEGORY" "$PLAN_SIG"
+      PLAN_RET=$?
+      case $PLAN_RET in
+        0) VERSCHOBEN=$((VERSCHOBEN+1)); BERICHT_VERSCHOBEN=$((BERICHT_VERSCHOBEN+1)) ;;
+        1) SONSTIGES=$((SONSTIGES+1)) ;;
+        2) IGNORIERT=$((IGNORIERT+1)); BERICHT_IGNORIERT=$((BERICHT_IGNORIERT+1)) ;;
+        3) FEHLER_ANZ=$((FEHLER_ANZ+1)); BERICHT_FEHLER=$((BERICHT_FEHLER+1)) ;;
+      esac
+    done < "$INTELLIGENT_PLAN"
+  elif $UNTERORDNER; then
     # Snapshot der Quellen erstellen, damit neu angelegte Zielverzeichnisse
     # nicht waehrend desselben Laufs erneut verarbeitet werden.
     local SNAPSHOT
