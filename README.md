@@ -241,5 +241,15 @@ Der JSON-Endpunkt ist:
     python3 api.py intelligent-preview ~/Downloads --recursive
     python3 api.py intelligent-preview ~/Downloads --profile buero
     python3 api.py intelligent-preview ~/Downloads --config meine.txt
+    python3 api.py intelligent-sort ~/Downloads --confirm
 
 Jedes Ereignis enthält mindestens source, category, confidence, reason und die Signalquelle. Dadurch kann eine spätere GUI- oder Automationsschicht Vorschläge anzeigen oder anhand definierter Konfidenzgrenzen bewerten, ohne direkt in den Sortierkern einzugreifen.
+
+
+## v9.0 Phase 5 – Intelligent Sort mit Confirmation Gate
+
+`intelligent-sort` ist bewusst nicht automatisch ausführbar. Ohne `--confirm` wird ausschließlich ein maschinenlesbarer Confirmation-Gate-Status ausgegeben und keine Datei verändert. Mit `--confirm` werden standardmäßig nur Vorschläge mit der Confidence-Policy `auto` verarbeitet; `review` und `leave` bleiben unangetastet.
+
+Die freigegebenen Vorschläge werden als temporärer, NUL-delimitierter Plan an die bestehende Bash-Sortierengine übergeben. Die Engine prüft Quelle, Ziel und Dateisignatur erneut und schreibt erfolgreiche Moves in das bestehende Undo-Journal. Python enthält damit weiterhin keinen zweiten Datei-Move-Mechanismus.
+
+Die GUI verlangt vor dem intelligenten Sortieren eine ausdrückliche Bestätigung und sortiert ebenfalls nur die sicheren Vorschläge.

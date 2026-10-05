@@ -258,6 +258,27 @@ echo "[20/20] v9.0 Decision-Engine Aktionen"
 python3 -c 'import sys; sys.path.insert(0, sys.argv[1]); from intelligent import build_decision; assert build_decision({"confidence":1.0,"category":"Dokumente"})["action"]=="eligible_for_confirmation"; assert build_decision({"confidence":0.65,"category":"Code"})["action"]=="requires_review"; assert build_decision({"confidence":0.0,"category":"Sonstiges"})["action"]=="leave_untouched"; assert "action" in build_decision({"confidence":0.85,"category":"Bilder"})' "$ROOT"
 grep -Fq 'decision_action' "$ROOT/intelligent.py" || fail "Decision Engine fehlt"
 
+echo "[21/21] v9.0 Intelligent Confirmation Gate"
+mkdir -p "$TMP/intelligent-sort"
+printf 'jpg' > "$TMP/intelligent-sort/confirmed.jpg"
+printf 'unknown' > "$TMP/intelligent-sort/mystery.zzz"
+NO_CONFIRM=$(python3 "$ROOT/api.py" intelligent-sort "$TMP/intelligent-sort")
+printf '%s' "$NO_CONFIRM" | python3 -c 'import json,sys; p=json.load(sys.stdin); assert p["success"] and p["events"][0]["status"]=="confirmation_required", p'
+assert_file "$TMP/intelligent-sort/confirmed.jpg"
+CONFIRM=$(python3 "$ROOT/api.py" intelligent-sort "$TMP/intelligent-sort" --confirm)
+printf '%s' "$CONFIRM" | python3 -c 'import json,sys; p=json.load(sys.stdin); assert p["success"], p; assert any(e.get("event")=="move" and e.get("status")=="ok" for e in p["events"]), p'
+assert_file "$TMP/intelligent-sort/Bilder/confirmed.jpg"
+assert_file "$TMP/intelligent-sort/mystery.zzz"
+UNDO_INT=$(python3 "$ROOT/api.py" undo "$TMP/intelligent-sort")
+printf '%s' "$UNDO_INT" | python3 -c 'import json,sys; p=json.load(sys.stdin); assert p["success"], p'
+assert_file "$TMP/intelligent-sort/confirmed.jpg"
+[ ! -e "$TMP/intelligent-sort/Bilder/confirmed.jpg" ] || fail "Intelligent sort undo failed"
+
+echo "[22/22] v9.0 Intelligent Confirmation GUI"
+grep -Fq 'def _intelligent_sortieren(self):' "$ROOT/gui.py" || fail "GUI Intelligent Sort fehlt"
+grep -Fq 'intelligent-sort' "$ROOT/gui.py" || fail "GUI nutzt Intelligent Sort API nicht"
+grep -Fq 'self.intelligent_sort_btn' "$ROOT/gui.py" || fail "GUI Confirmation Button fehlt"
+
 echo "PASS: v9.0 decision engine tests"
 
 echo "PASS: v9.0 intelligent sorting tests"
