@@ -47,7 +47,7 @@ bash "$SCRIPT" "$TMP/recursive" --unterordner >/dev/null
 assert_file "$TMP/recursive/Code/tool.py"
 assert_not_file "$TMP/recursive/Code/Code/tool.py"
 
-echo "[5/5] Spezialnamen und Dry-Run"
+echo "[5/6] Spezialnamen und Dry-Run"
 mkdir -p "$TMP/special"
 printf "safe" > "$TMP/special/hello world.txt"
 printf "dry" > "$TMP/special/preview.pdf"
@@ -58,7 +58,7 @@ after=$(find "$TMP/special" -type f | sort | sha256sum)
 assert_file "$TMP/special/hello world.txt"
 assert_file "$TMP/special/preview.pdf"
 
-echo "[5/5] Symlink-Zielschutz"
+echo "[6/6] Symlink-Zielschutz"
 mkdir -p "$TMP/symlink-target"
 printf "outside" > "$TMP/outside.txt"
 ln -s "$TMP/symlink-target" "$TMP/symlink/Bilder" 2>/dev/null || true
