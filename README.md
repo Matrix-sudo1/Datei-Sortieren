@@ -1,6 +1,6 @@
 # 📂 Datei-Sortierer
 
-Ein Bash-basierter Datei-Sortierer mit optionaler Tkinter-GUI. Version **v8.2** konzentriert sich auf Stabilität, sichere Pfadbehandlung, reproduzierbare Tests und eine gemeinsame Sortier-Engine für CLI und GUI.
+Ein Bash-basierter Datei-Sortierer mit optionaler Tkinter-GUI. Version **v8.4** konzentriert sich auf Stabilität, sichere Pfadbehandlung, reproduzierbare Tests und eine gemeinsame Sortier-Engine für CLI und GUI.
 
 ## Kernfunktionen
 
@@ -65,7 +65,7 @@ Die mitgelieferten Profile verwenden dasselbe Format und werden von der Bash-Eng
 
 ## JSON-API
 
-v8.2 ergänzt einen stabilen Maschinenzugang über `api.py`. Die API verwendet die Bash-Engine weiterhin als einzige Sortierlogik und liefert strukturierte JSON-Antworten mit Ereignissen.
+v8.4 ergänzt einen stabilen Maschinenzugang über `api.py`. Die API verwendet die Bash-Engine weiterhin als einzige Sortierlogik und liefert strukturierte JSON-Antworten mit Ereignissen.
 
 ```bash
 python3 api.py preview ~/Downloads
@@ -125,15 +125,17 @@ Automatisierte Regressionstests befinden sich unter:
 tests/test_regression.sh
 ```
 
-GitHub Actions führt sie bei Pushes auf `main` und `v8-refactor` sowie bei Pull Requests gegen `main` aus.
+GitHub Actions führt sie bei Pushes auf `main` sowie bei Pull Requests gegen `main` aus.
 
 Der Testumfang umfasst aktuell:
 
-- Bash-Syntax
+- Bash- und Python-Syntax
 - Standardsortierung
 - Profile
 - rekursive Sortierung
 - Schutz gegen erneute Verarbeitung erzeugter Zielordner
+- maschinenlesbare JSON-Fehlerfälle
+- Watch-Engine mit Event- und Polling-Fallback
 
 Zusätzlich werden die JSON-API, Sonderzeichen im Journal und der NUL-delimitierte Log-Reader regressionsgeprüft.
 
