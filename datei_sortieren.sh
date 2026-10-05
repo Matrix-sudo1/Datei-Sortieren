@@ -955,25 +955,6 @@ fi
 # ============================================
 laden_kategorien
 sortiere_ordner "$ZIEL"
-\\0' QUELLE && IFS= read -r -d 
-    [ -z "$QUELLE" ] && continue
-    if [ ! -e "$ZIEL_DATEI" ]; then
-      echo -e "${ROT}Nicht vorhanden: ${ZIEL_DATEI##*/}${RESET}"
-      FEHLER_UNDO=$((FEHLER_UNDO+1)); continue
-    fi
-    if [ -e "$QUELLE" ]; then
-      echo -e "${ROT}Ziel bereits vorhanden, nichts ueberschrieben: ${QUELLE##*/}${RESET}"
-      FEHLER_UNDO=$((FEHLER_UNDO+1)); continue
-    fi
-    if mv -- "$ZIEL_DATEI" "$QUELLE" 2>/dev/null; then
-      echo -e "${GRUEN}Wiederhergestellt: ${QUELLE##*/}${RESET}"
-      WIEDERHERGESTELLT=$((WIEDERHERGESTELLT+1))
-    else
-      echo -e "${ROT}Fehler: ${QUELLE##*/}${RESET}"
-      FEHLER_UNDO=$((FEHLER_UNDO+1))
-    fi
-  done < "$TMP_LOG"
-
   rm -f "$TMP_LOG"
   if [ "$FEHLER_UNDO" -eq 0 ]; then
     find "$ZIEL" -mindepth 1 -type d -empty -delete 2>/dev/null
