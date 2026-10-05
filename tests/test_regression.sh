@@ -205,6 +205,7 @@ AUTO_PAUSE=$(python3 "$ROOT/api.py" automation-pause "$TMP/automation")
 printf '%s' "$AUTO_PAUSE" | python3 -c 'import json,sys; p=json.load(sys.stdin); assert p["success"], p; assert p["events"][0]["status"] == "paused", p'
 AUTO_RESUME=$(python3 "$ROOT/api.py" automation-resume "$TMP/automation")
 printf '%s' "$AUTO_RESUME" | python3 -c 'import json,sys; p=json.load(sys.stdin); assert p["success"], p; assert p["events"][0]["status"] == "running", p'
+sleep 2
 printf 'automation' > "$TMP/automation/test.txt"
 for _ in 1 2 3 4 5 6; do
   [ -f "$TMP/automation/Dokumente/test.txt" ] && break
