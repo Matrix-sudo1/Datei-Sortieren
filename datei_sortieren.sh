@@ -795,6 +795,93 @@ LOGDATEI="$ZIEL/.sortier_log.txt"
 # ============================================
 #  WATCH-MODUS
 # ============================================
+watch_signatur() {
+  local DATEI="$1"
+  stat -c '%s:%Y' "$DATEI" 2>/dev/null ||
+    stat -f '%z:%m' "$DATEI" 2>/dev/null ||
+    echo unknown
+}
+
+watch_verarbeite_datei() {
+  local DATEI="$1"
+  local NAME="${DATEI##*/}"
+  [ -f "$DATEI" ] || return 0
+  [ "$NAME" = ".sortier_log.txt" ] && return 0
+  echo -e "${CYAN}[$(date '+%H:%M:%S')] $NAME${RESET}"
+  local DATUM_LOG RET
+  DATUM_LOG=$(date '+%d.%m.%Y %H:%M')
+  sortiere_datei "$DATEI" "$ZIEL" "false" "$LOGDATEI" "$NACH_DATUM" "$DATUM_LOG"
+  RET=$?
+  $NOTIFY && [ $RET -le 1 ] && sende_notification "Datei-Sortierer" "$NAME verarbeitet"
+  return "$RET"
+}
+
+watch_polling() {
+  echo -e "${GELB}Polling-Modus (alle ${WATCH_INTERVAL}s)${RESET}"; echo ""
+  declare -A BEKANNTE_DATEIEN
+  shopt -s nullglob
+  for DATEI in "$ZIEL"/*; do
+    [ -f "$DATEI" ] && BEKANNTE_DATEIEN["$DATEI"]="$(watch_signatur "$DATEI")"
+  done
+  shopt -u nullglob
+  echo -e "${CYAN}${#BEKANNTE_DATEIEN[@]} bestehende Datei(en) ignoriert.${RESET}"
+
+  while true; do
+    sleep "$WATCH_INTERVAL"
+    shopt -s nullglob
+    for DATEI in "$ZIEL"/*; do
+      [ -f "$DATEI" ] || continue
+      [ "${DATEI##*/}" = ".sortier_log.txt" ] && continue
+      SIGNATUR="$(watch_signatur "$DATEI")"
+      if [ -z "${BEKANNTE_DATEIEN[$DATEI]+x}" ] || [ "${BEKANNTE_DATEIEN[$DATEI]}" != "$SIGNATUR" ]; then
+        watch_verarbeite_datei "$DATEI"
+        BEKANNTE_DATEIEN["$DATEI"]="$(watch_signatur "$DATEI")"
+      fi
+    done
+    shopt -u nullglob
+    echo -ne "${GELB}.${RESET}"
+  done
+}
+
+watch_inotify() {
+  echo -e "${GRUEN}Echtzeit-Ueberwachung (inotifywait, rekursiv + debounce)${RESET}"; echo ""
+  declare -A AUSSTEHEND
+  local LETZTES_EREIGNIS=0
+  local EVENT
+  local RELATIVE EVENT_PATH EVENT_TYPE
+
+  # -m: dauerhaft lauschen, -r: Unterordner mitbeobachten.
+  # Nur Dateien direkt im Wurzelordner werden verarbeitet; Dateien in
+  # Zielkategorien erzeugen dadurch keine Sortierschleife.
+  while IFS='|' read -r EVENT_PATH EVENT_TYPE; do
+    [ -n "$EVENT_PATH" ] || continue
+    case "$EVENT_TYPE" in
+      *CLOSE_WRITE*|*MOVED_TO*|*CREATE*)
+        case "$EVENT_PATH" in
+          "$ZIEL"/*)
+            RELATIVE="${EVENT_PATH#"$ZIEL"/}"
+            [[ "$RELATIVE" == */* ]] && continue
+            [ "${RELATIVE##*/}" = ".sortier_log.txt" ] && continue
+            AUSSTEHEND["$EVENT_PATH"]=1
+            LETZTES_EREIGNIS=$(date +%s)
+            ;;
+        esac
+        ;;
+    esac
+
+    # Kurze Schreib-/Move-Bursts werden gesammelt und erst nach einer
+    # Sekunde Ereignisruhe verarbeitet.
+    if [ "${#AUSSTEHEND[@]}" -gt 0 ] && [ $(( $(date +%s) - LETZTES_EREIGNIS )) -ge 1 ]; then
+      for DATEI in "${!AUSSTEHEND[@]}"; do
+        watch_verarbeite_datei "$DATEI"
+        unset 'AUSSTEHEND[$DATEI]'
+      done
+    fi
+  done < <(inotifywait -q -m -r -e close_write,moved_to,create --format '%w%f|%e' "$ZIEL" 2>/dev/null)
+
+  return 1
+}
+
 if $WATCH; then
   laden_kategorien
   echo -e "${CYAN}╔══════════════════════════════════════════════╗"
@@ -808,50 +895,13 @@ if $WATCH; then
   trap 'echo -e "\n${GELB}Watch-Modus beendet.${RESET}"; exit 0' INT TERM
 
   if command -v inotifywait &>/dev/null; then
-    echo -e "${GRUEN}Echtzeit-Ueberwachung (inotifywait)${RESET}"; echo ""
-    while true; do
-      if ! NEUE_DATEI=$(inotifywait -q -e close_write,moved_to --format '%f' "$ZIEL" 2>/dev/null); then
-        break
-      fi
-      DATEI="$ZIEL/$NEUE_DATEI"
-      [ -f "$DATEI" ] || continue
-      [ "$NEUE_DATEI" = ".sortier_log.txt" ] && continue
-      echo -e "${CYAN}[$(date '+%H:%M:%S')] $NEUE_DATEI${RESET}"
-      DATUM_LOG=$(date '+%d.%m.%Y %H:%M')
-      sortiere_datei "$DATEI" "$ZIEL" "false" "$LOGDATEI" "$NACH_DATUM" "$DATUM_LOG"
-      RET=$?
-      $NOTIFY && [ $RET -le 1 ] && sende_notification "Datei-Sortierer" "$NEUE_DATEI sortiert"
-    done
+    if watch_inotify; then
+      exit 0
+    fi
+    echo -e "${GELB}inotifywait wurde beendet – Wechsel auf Polling.${RESET}"
   fi
 
-  echo -e "${GELB}Polling-Modus (alle ${WATCH_INTERVAL}s)${RESET}"; echo ""
-  declare -A BEKANNTE_DATEIEN
-  shopt -s nullglob
-  for DATEI in "$ZIEL"/*; do
-    [ -f "$DATEI" ] && BEKANNTE_DATEIEN["$DATEI"]="$(stat -c '%s:%Y' "$DATEI" 2>/dev/null || stat -f '%z:%m' "$DATEI" 2>/dev/null || echo unknown)"
-  done
-  shopt -u nullglob
-  echo -e "${CYAN}${#BEKANNTE_DATEIEN[@]} bestehende Datei(en) ignoriert.${RESET}"
-
-  while true; do
-    sleep "$WATCH_INTERVAL"; NEUE=0
-    shopt -s nullglob
-    for DATEI in "$ZIEL"/*; do
-      [ -f "$DATEI" ] || continue
-      [ "${DATEI##*/}" = ".sortier_log.txt" ] && continue
-      SIGNATUR="$(stat -c '%s:%Y' "$DATEI" 2>/dev/null || stat -f '%z:%m' "$DATEI" 2>/dev/null || echo unknown)"
-      if [ -z "${BEKANNTE_DATEIEN[$DATEI]+x}" ] || [ "${BEKANNTE_DATEIEN[$DATEI]}" != "$SIGNATUR" ]; then
-        echo -e "${CYAN}[$(date '+%H:%M:%S')] ${DATEI##*/}${RESET}"
-        DATUM_LOG=$(date '+%d.%m.%Y %H:%M')
-        sortiere_datei "$DATEI" "$ZIEL" "false" "$LOGDATEI" "$NACH_DATUM" "$DATUM_LOG"
-        RET=$?
-        $NOTIFY && [ $RET -le 1 ] && sende_notification "Datei-Sortierer" "${DATEI##*/} verarbeitet"
-        BEKANNTE_DATEIEN["$DATEI"]="$SIGNATUR"; NEUE=$((NEUE+1))
-      fi
-    done
-    shopt -u nullglob
-    [ $NEUE -eq 0 ] && echo -ne "${GELB}.${RESET}"
-  done
+  watch_polling
 fi
 
 # ============================================
