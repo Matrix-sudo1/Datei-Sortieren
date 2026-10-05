@@ -243,6 +243,8 @@ def automation_start(folder: str, options: dict) -> tuple[bool, dict]:
         args.append("--kopieren")
     if options.get("notify"):
         args.append("--notify")
+    if options.get("interval"):
+        args.extend(["--watch-interval", str(options["interval"])])
     for key, flag in (("profile", "--profil"), ("config", "--config"), ("ignore", "--ignore")):
         if options.get(key):
             args.extend([flag, str(options[key])])
@@ -363,6 +365,7 @@ def build_parser() -> argparse.ArgumentParser:
     automation.add_argument("--config")
     automation.add_argument("--ignore")
     automation.add_argument("--notify", action="store_true")
+    automation.add_argument("--interval", type=int, default=10)
 
     for command in ("automation-status", "automation-stop", "automation-pause", "automation-resume"):
         action = sub.add_parser(command)
@@ -427,6 +430,7 @@ def main() -> int:
                     "profile": ns.profile,
                     "config": ns.config,
                     "ignore": ns.ignore,
+                    "interval": ns.interval,
                 }
                 ok, value = automation_start(ns.folder, options)
             elif ns.command == "automation-status":
