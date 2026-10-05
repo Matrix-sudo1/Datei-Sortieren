@@ -145,4 +145,25 @@ grep -q 'self._api_aktion(["undo", self.ordner_pfad.get()]' "$ROOT/gui.py" || fa
 grep -q 'self._api_aktion(["log", self.ordner_pfad.get()]' "$ROOT/gui.py" || fail "GUI-Log nutzt nicht die JSON API"
 grep -q 'p.add_argument("--notify", action="store_true")' "$ROOT/api.py" || fail "API-Notify fehlt"
 
-echo "PASS: v8.5 GUI/API regression tests"
+echo "[12/12] Konfigurations-API und GUI-Editor"
+mkdir -p "$TMP/config"
+cat > "$TMP/config/custom.txt" <<'CFG'
+# custom
+Bilder=jpg jpeg png
+Dokumente=pdf txt
+CFG
+CONFIG_OUTPUT=$(python3 "$ROOT/api.py" config "$TMP/config/custom.txt")
+printf '%s' "$CONFIG_OUTPUT" | python3 -c 'import json,sys; p=json.load(sys.stdin); assert p["success"] and len(p["events"]) == 2, p'
+INVALID_CONFIG="$TMP/config/invalid.txt"
+printf 'Bad/Name=txt\n' > "$INVALID_CONFIG"
+INVALID_CONFIG_OUTPUT=$(python3 "$ROOT/api.py" config "$INVALID_CONFIG" || true)
+printf '%s' "$INVALID_CONFIG_OUTPUT" | python3 -c 'import json,sys; p=json.load(sys.stdin); assert not p["success"] and p["exit_code"] == 2, p'
+SAVE_OUTPUT=$(python3 "$ROOT/api.py" config-save "$TMP/config/saved.txt" --content 
+Bilder=jpg png\nDokumente=pdf txt\n')
+printf '%s' "$SAVE_OUTPUT" | python3 -c 'import json,sys; p=json.load(sys.stdin); assert p["success"], p'
+grep -q 'Bilder=jpg png' "$TMP/config/saved.txt" || fail "Config-Speichern fehlgeschlagen"
+grep -q 'def _baue_tab_config(self):' "$ROOT/gui.py" || fail "Config-GUI fehlt"
+grep -q 'self._config_api(["config", self._config_datei()])' "$ROOT/gui.py" || fail "Config-GUI nutzt API nicht"
+grep -q 'config-save' "$ROOT/gui.py" || fail "Config-GUI Save fehlt"
+
+echo "PASS: v8.6 configuration hardening tests"
