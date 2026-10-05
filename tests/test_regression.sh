@@ -329,3 +329,16 @@ echo "PASS: v9.0 Phase 6 intelligent GUI workflow"
 
 INVALID_PROFILE_OUTPUT=$(python3 "$ROOT/api.py" intelligent-preview "$TMP/intelligent" --profile ../config || true)
 printf "%s" "$INVALID_PROFILE_OUTPUT" | python3 -c 'import json,sys; p=json.load(sys.stdin); assert not p["success"] and p["exit_code"]==2, p'
+
+echo "[25/25] v9.0 Intelligent Sort Report"
+mkdir -p "$TMP/intelligent-report"
+printf "jpg" > "$TMP/intelligent-report/report.jpg"
+REPORT_PREVIEW=$(python3 "$ROOT/api.py" intelligent-sort "$TMP/intelligent-report")
+printf "%s" "$REPORT_PREVIEW" | python3 -c 'import json,sys; p=json.load(sys.stdin); assert p["success"], p; e=p["events"][0]; assert e["status"]=="confirmation_required" and e.get("report"), p'
+assert_file "$TMP/intelligent-report/.datei-sortierer/intelligent-report.json"
+python3 -c 'import json,sys; p=json.load(open(sys.argv[1])); assert p["mode"]=="intelligent-sort-preview"; assert p["summary"]["auto"]==1; assert len(p["files"])==1' "$TMP/intelligent-report/.datei-sortierer/intelligent-report.json"
+REPORT_CONFIRM=$(python3 "$ROOT/api.py" intelligent-sort "$TMP/intelligent-report" --confirm)
+printf "%s" "$REPORT_CONFIRM" | python3 -c 'import json,sys; p=json.load(sys.stdin); assert p["success"], p'
+assert_file "$TMP/intelligent-report/Bilder/report.jpg"
+python3 -c 'import json,sys; p=json.load(open(sys.argv[1])); assert p["mode"]=="intelligent-sort"; assert p["summary"]["selected"]==1; assert p["summary"]["engine_exit_code"]==0; assert p["plan_hash"]' "$TMP/intelligent-report/.datei-sortierer/intelligent-report.json"
+echo "PASS: v9.0 intelligent sort report"
