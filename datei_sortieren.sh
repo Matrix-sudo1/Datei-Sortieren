@@ -919,7 +919,11 @@ if $UNDO; then
   cp -- "$LOGDATEI" "$TMP_LOG" 2>/dev/null || { rm -f "$TMP_LOG"; echo -e "${ROT}Log konnte nicht gelesen werden.${RESET}"; exit 1; }
 
   WIEDERHERGESTELLT=0; FEHLER_UNDO=0
-  while IFS= read -r -d '' QUELLE && IFS= read -r -d $'\\0' ZIEL_DATEI && IFS= read -r -d $'\\0' DATUM; do
+  mapfile -d '' -t JOURNAL_FIELDS < "$TMP_LOG"
+  for ((J=0; J+2<${#JOURNAL_FIELDS[@]}; J+=3)); do
+    QUELLE="${JOURNAL_FIELDS[$J]}"
+    ZIEL_DATEI="${JOURNAL_FIELDS[$((J+1))]}"
+    DATUM="${JOURNAL_FIELDS[$((J+2))]}"
     [ -z "$QUELLE" ] && continue
     if [ ! -e "$ZIEL_DATEI" ]; then
       echo -e "${ROT}Nicht vorhanden: ${ZIEL_DATEI##*/}${RESET}"
@@ -936,7 +940,7 @@ if $UNDO; then
       echo -e "${ROT}Fehler: ${QUELLE##*/}${RESET}"
       FEHLER_UNDO=$((FEHLER_UNDO+1))
     fi
-  done < "$TMP_LOG"
+  done
 
   rm -f "$TMP_LOG"
   if [ "$FEHLER_UNDO" -eq 0 ]; then
