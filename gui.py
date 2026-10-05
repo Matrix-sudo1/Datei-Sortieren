@@ -629,6 +629,13 @@ class DateiSortiererApp:
             relief="flat", cursor="hand2", pady=12,
             command=self._intelligent_vorschau)
         self.intelligent_btn.pack(side="left", fill="x", expand=True, padx=(0,6))
+        self.intelligent_sort_btn = tk.Button(
+            btn_leiste, text="🧠  Intelligent sortieren",
+            font=FONT_BTN, bg=F["start"], fg=F["btn_text"],
+            activebackground="#c0392b", activeforeground=F["btn_text"],
+            relief="flat", cursor="hand2", pady=12,
+            command=self._intelligent_sortieren)
+        self.intelligent_sort_btn.pack(side="left", fill="x", expand=True, padx=(0,6))
 
         self.start_btn = tk.Button(
             btn_leiste, text="🚀  Sortieren starten",
@@ -1355,6 +1362,27 @@ class DateiSortiererApp:
             self._nach(_upd)
 
         threading.Thread(target=_t, daemon=True).start()
+
+    def _intelligent_sortieren(self):
+        """Führt nach expliziter Bestätigung nur sichere Intelligent-Proposals aus."""
+        pfad = self.ordner_pfad.get()
+        if not pfad:
+            self._ordner_waehlen()
+            return
+        if self.laeuft or self._intelligent_laeuft:
+            return
+        if not os.path.isdir(pfad):
+            messagebox.showerror("Fehler", f"Ordner nicht gefunden:\n{pfad}")
+            return
+        if not messagebox.askyesno(
+                "Intelligent sortieren",
+                "Nur 🟢 sichere Intelligent-Vorschläge werden sortiert.\n\n"
+                "Möchtest du diese Vorschläge jetzt ausdrücklich bestätigen und ausführen?"):
+            return
+        args = [sys.executable, self.api_pfad, "intelligent-sort", pfad, "--confirm"]
+        if self.unterordner_var.get():
+            args.append("--recursive")
+        self._api_aktion(args, "INTELLIGENT SORTIEREN", callback=self._vorschau_laden)
 
     def _intelligent_zeile(self, dateiname, kategorie, konfidenz, entscheidung, grund, i):
         F = self._F
