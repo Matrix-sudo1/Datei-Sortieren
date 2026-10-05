@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # ============================================
-#  Datei-Sortierer GUI v8.4
+#  Datei-Sortierer GUI v8.5
 #  NEU:
 #  - Drag & Drop (Ordner ins Fenster ziehen)
 #  - Dark / Light Theme Umschalter
@@ -128,7 +128,7 @@ def _parse_drop(data):
 class DateiSortiererApp:
     def __init__(self, root):
         self.root = root
-        self.root.title("Datei-Sortierer v8.4")
+        self.root.title("Datei-Sortierer v8.5")
         self.root.geometry("900x780")
         self.root.minsize(800, 660)
         self.root.resizable(True, True)
@@ -1013,7 +1013,7 @@ class DateiSortiererApp:
                  font=FONT_KLEIN, bg=F["bg"],
                  fg=F["gruen"] if bash_ok else F["rot"], padx=8)
         self._bash_status_lbl.pack(side="right")
-        tk.Label(bar, text="GUI v8.4",
+        tk.Label(bar, text="GUI v8.5",
                  font=FONT_KLEIN, bg=F["bg"], fg=F["text_dim"], padx=8).pack(side="right")
 
     # ------------------------------------------
