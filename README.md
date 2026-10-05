@@ -1,6 +1,6 @@
 # 📂 Datei-Sortierer
 
-Ein Bash-basierter Datei-Sortierer mit optionaler Tkinter-GUI. Version **v8.7** konzentriert sich auf Stabilität, sichere Pfadbehandlung, reproduzierbare Tests und eine gemeinsame Sortier-Engine für CLI und GUI.
+Ein Bash-basierter Datei-Sortierer mit optionaler Tkinter-GUI. Version **v8.8** konzentriert sich auf Stabilität, sichere Pfadbehandlung, reproduzierbare Tests und eine gemeinsame Sortier-Engine für CLI und GUI.
 
 ## Kernfunktionen
 
@@ -65,7 +65,7 @@ Die mitgelieferten Profile verwenden dasselbe Format und werden von der Bash-Eng
 
 ## JSON-API
 
-v8.7 ergänzt einen stabilen Maschinenzugang über `api.py`. Die API verwendet die Bash-Engine weiterhin als einzige Sortierlogik und liefert strukturierte JSON-Antworten mit Ereignissen.
+v8.8 erweitert den stabilen Maschinenzugang über `api.py`. Die API verwendet die Bash-Engine weiterhin als einzige Sortierlogik und liefert strukturierte JSON-Antworten mit Ereignissen.
 
 ```bash
 python3 api.py preview ~/Downloads
@@ -73,6 +73,12 @@ python3 api.py sort ~/Downloads --recursive
 python3 api.py undo ~/Downloads
 python3 api.py log ~/Downloads
 python3 api.py config config.txt
+python3 api.py profiles
+python3 api.py automation-start ~/Downloads --recursive
+python3 api.py automation-status ~/Downloads
+python3 api.py automation-pause ~/Downloads
+python3 api.py automation-resume ~/Downloads
+python3 api.py automation-stop ~/Downloads
 python3 api.py config-save config.txt --content 'Bilder=jpg png\nDokumente=pdf txt'
 ```
 
@@ -144,6 +150,8 @@ Der Testumfang umfasst aktuell:
 - TOCTOU-/Race-Schutz fuer Quelldateien und Symlink-Ablehnung beim Undo
 - GUI-Konfigurationseditor über die JSON-API
 - Watch-Engine mit Event- und Polling-Fallback
+- verwaltete Automation mit Start/Stop/Pause/Fortsetzen/Status
+- Profil-Liste über die JSON-API
 
 Zusätzlich werden die JSON-API, Sonderzeichen im Journal, Pending-Journals, beschaedigte Journals und der NUL-delimitierte Log-Reader regressionsgeprüft.
 
@@ -192,3 +200,22 @@ Vor einer Dateioperation wird die Quelldatei erneut auf Existenz, Symlink-Status
 Undo und Log-Anzeige validieren das NUL-delimitierte Journal und lehnen unvollstaendige Datensaetze ab. Symlinks werden beim Undo nicht als wiederherzustellende Quelldateien akzeptiert.
 
 Die JSON-API speichert Konfigurationen weiterhin atomar, verwendet dafuer aber einen eindeutigen temporaeren Dateinamen im Zielverzeichnis, synchronisiert den Inhalt vor dem Replace und verweigert das direkte Ersetzen eines bestehenden Config-Symlinks.
+
+
+## v8.8 Automation
+
+Die JSON-API kann den Watch-Modus als verwalteten Hintergrundprozess starten und kontrollieren. Der Prozess erhält eine eigene Session, schreibt sein Laufzeitprotokoll unter `.datei-sortierer/automation.log` und seinen Zustand unter `.datei-sortierer/automation.json`.
+
+Beispiele:
+
+```bash
+python3 api.py automation-start ~/Downloads --recursive
+python3 api.py automation-status ~/Downloads
+python3 api.py automation-pause ~/Downloads
+python3 api.py automation-resume ~/Downloads
+python3 api.py automation-stop ~/Downloads
+```
+
+Die GUI enthält dafür einen eigenen **Automation**-Tab. Der bestehende Sortierkern bleibt unverändert die zentrale Quelle für Sortierentscheidungen.
+
+Die Zustandsdatei enthält nur PID, Status, Zielordner, Optionen und Startzeit. Sie wird mit restriktiven Dateirechten geschrieben und atomar ersetzt.
