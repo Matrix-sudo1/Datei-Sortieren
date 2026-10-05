@@ -136,7 +136,7 @@ def classify_file(path: str | Path, categories: dict[str, set[str]]) -> dict:
         "category": "Sonstiges",
         "confidence": 0.0,
         "reason": "no deterministic extension, MIME or filename signal matched",
-        "source": "fallback",
+        "signal": "fallback",
     }
 
 def iter_files(folder: str | Path, recursive: bool = False) -> Iterable[Path]:
