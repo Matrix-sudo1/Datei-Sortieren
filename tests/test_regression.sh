@@ -283,5 +283,49 @@ echo "PASS: v9.0 decision engine tests"
 
 echo "PASS: v9.0 intelligent sorting tests"
 
+echo "[23/23] v9.0 Intelligent Selection Workflow"
+mkdir -p "$TMP/intelligent-selection"
+printf 'jpg' > "$TMP/intelligent-selection/auto.jpg"
+printf 'unknown' > "$TMP/intelligent-selection/project_code.zzz"
+printf 'unknown' > "$TMP/intelligent-selection/mystery.zzz"
+PREVIEW_SELECTION=$(python3 "$ROOT/api.py" intelligent-preview "$TMP/intelligent-selection")
+printf '%s' "$PREVIEW_SELECTION" | python3 -c 'import json,sys; p=json.load(sys.stdin); assert p["success"], p; events=p["events"]; assert any(e.get("event")=="intelligent-plan" and e.get("plan_hash") for e in events), p'
+PLAN_HASH=$(printf '%s' "$PREVIEW_SELECTION" | python3 -c 'import json,sys; p=json.load(sys.stdin); print(next(e["plan_hash"] for e in p["events"] if e.get("event")=="intelligent-plan") )'
+AUTO_SOURCE="$TMP/intelligent-selection/auto.jpg"
+REVIEW_SOURCE="$TMP/intelligent-selection/project_code.zzz"
+SELECTED=$(python3 "$ROOT/api.py" intelligent-sort "$TMP/intelligent-selection" --confirm --plan-hash "$PLAN_HASH" --select "$AUTO_SOURCE")
+printf '%s' "$SELECTED" | python3 -c 'import json,sys; p=json.load(sys.stdin); assert p["success"], p'
+assert_file "$TMP/intelligent-selection/Bilder/auto.jpg"
+assert_file "$TMP/intelligent-selection/project_code.zzz"
+assert_file "$TMP/intelligent-selection/mystery.zzz"
+
+mkdir -p "$TMP/intelligent-selection-review"
+printf 'unknown' > "$TMP/intelligent-selection-review/project_code.zzz"
+PREVIEW_REVIEW=$(python3 "$ROOT/api.py" intelligent-preview "$TMP/intelligent-selection-review")
+REVIEW_HASH=$(printf '%s' "$PREVIEW_REVIEW" | python3 -c 'import json,sys; p=json.load(sys.stdin); print(next(e["plan_hash"] for e in p["events"] if e.get("event")=="intelligent-plan") )')
+REVIEW_SOURCE="$TMP/intelligent-selection-review/project_code.zzz"
+REVIEW_RESULT=$(python3 "$ROOT/api.py" intelligent-sort "$TMP/intelligent-selection-review" --confirm --include-review --plan-hash "$REVIEW_HASH" --select "$REVIEW_SOURCE")
+printf '%s' "$REVIEW_RESULT" | python3 -c 'import json,sys; p=json.load(sys.stdin); assert p["success"], p'
+assert_file "$TMP/intelligent-selection-review/Code/project_code.zzz"
+
+mkdir -p "$TMP/intelligent-selection-stale"
+printf 'jpg' > "$TMP/intelligent-selection-stale/stale.jpg"
+PREVIEW_STALE=$(python3 "$ROOT/api.py" intelligent-preview "$TMP/intelligent-selection-stale")
+STALE_HASH=$(printf '%s' "$PREVIEW_STALE" | python3 -c 'import json,sys; p=json.load(sys.stdin); print(next(e["plan_hash"] for e in p["events"] if e.get("event")=="intelligent-plan") )')
+printf 'changed' >> "$TMP/intelligent-selection-stale/stale.jpg"
+STALE_RESULT=$(python3 "$ROOT/api.py" intelligent-sort "$TMP/intelligent-selection-stale" --confirm --plan-hash "$STALE_HASH" --select "$TMP/intelligent-selection-stale/stale.jpg" || true)
+printf '%s' "$STALE_RESULT" | python3 -c 'import json,sys; p=json.load(sys.stdin); assert not p["success"] and any(e.get("status")=="stale_plan" for e in p["events"]), p'
+assert_file "$TMP/intelligent-selection-stale/stale.jpg"
+
+echo "[24/24] v9.0 Intelligent GUI Selection"
+grep -Fq 'self._intelligent_rows = []' "$ROOT/gui.py" || fail "GUI selection state fehlt"
+grep -Fq 'self._intelligent_plan_hash = None' "$ROOT/gui.py" || fail "GUI plan hash state fehlt"
+grep -Fq '--select' "$ROOT/gui.py" || fail "GUI übergibt Auswahl nicht"
+grep -Fq '--plan-hash' "$ROOT/gui.py" || fail "GUI übergibt Plan-Hash nicht"
+grep -Fq 'state="disabled"' "$ROOT/gui.py" || fail "GUI Leave-Auswahl ist nicht gesperrt"
+grep -Fq 'decision == "auto"' "$ROOT/gui.py" || fail "GUI Auto-Vorauswahl fehlt"
+
+echo "PASS: v9.0 Phase 6 intelligent GUI workflow"
+
 INVALID_PROFILE_OUTPUT=$(python3 "$ROOT/api.py" intelligent-preview "$TMP/intelligent" --profile ../config || true)
 printf "%s" "$INVALID_PROFILE_OUTPUT" | python3 -c 'import json,sys; p=json.load(sys.stdin); assert not p["success"] and p["exit_code"]==2, p'
