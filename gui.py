@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # ============================================
-#  Datei-Sortierer GUI v8.0
+#  Datei-Sortierer GUI v8.1
 #  NEU:
 #  - Drag & Drop (Ordner ins Fenster ziehen)
 #  - Dark / Light Theme Umschalter
@@ -447,7 +447,7 @@ class DateiSortiererApp:
         leiste = tk.Frame(parent, bg=F["bg"], pady=6)
         leiste.pack(fill="x")
         self._reg(leiste, "bg")
-        self._titelleiste_lbl = tk.Label(leiste, text="🖥  DATEI-SORTIERER – GUI v8.0",
+        self._titelleiste_lbl = tk.Label(leiste, text="🖥  DATEI-SORTIERER – GUI v8.1",
                  font=("Segoe UI", 13, "bold"),
                  bg=F["bg"], fg=F["text"])
         self._titelleiste_lbl.pack(side="left")
@@ -809,7 +809,7 @@ class DateiSortiererApp:
                            ("header", F["akzent"])]:
             self.verlauf_text.tag_config(tag, foreground=farbe)
 
-        self._verlauf_schreiben("── Datei-Sortierer GUI v8.0 bereit ──\n", "header")
+        self._verlauf_schreiben("── Datei-Sortierer GUI v8.1 bereit ──\n", "header")
         self._verlauf_schreiben("Warte auf Aktion...\n\n", "dim")
 
     _LOG_MAX_ZEILEN = 2000
@@ -1003,7 +1003,7 @@ class DateiSortiererApp:
         bar.pack(fill="x")
         self._reg(bar, "bg")
         self.status_unten = tk.Label(
-            bar, text="GUI v8.0 – Drag & Drop  |  Dark/Light  |  Cronjob  |  Benachrichtigungen",
+            bar, text="GUI v8.1 – Drag & Drop  |  Dark/Light  |  Cronjob  |  Benachrichtigungen",
             font=FONT_KLEIN, bg=F["bg"], fg=F["gelb"])
         self.status_unten.pack(side="left")
         self._reg(self.status_unten, "bg")
@@ -1012,7 +1012,7 @@ class DateiSortiererApp:
                  font=FONT_KLEIN, bg=F["bg"],
                  fg=F["gruen"] if bash_ok else F["rot"], padx=8)
         self._bash_status_lbl.pack(side="right")
-        tk.Label(bar, text="GUI v8.0",
+        tk.Label(bar, text="GUI v8.1",
                  font=FONT_KLEIN, bg=F["bg"], fg=F["text_dim"], padx=8).pack(side="right")
 
     # ------------------------------------------
