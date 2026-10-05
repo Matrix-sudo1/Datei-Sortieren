@@ -30,6 +30,28 @@ def confidence_policy(confidence: float) -> dict[str, str]:
         return {"decision": "review", "confidence_band": "medium", "policy": "review recommended before sorting"}
     return {"decision": "leave", "confidence_band": "low", "policy": "do not automatically sort"}
 
+
+def decision_action(decision: str) -> str:
+    """Return the only permitted next-step action for a policy decision."""
+    actions = {
+        "auto": "eligible_for_confirmation",
+        "review": "requires_review",
+        "leave": "leave_untouched",
+    }
+    try:
+        return actions[decision]
+    except KeyError as exc:
+        raise ValueError(f"unknown decision: {decision}") from exc
+
+
+def build_decision(result: dict) -> dict:
+    """Attach an explicit action recommendation without performing file I/O."""
+    policy = confidence_policy(result.get("confidence", 0.0))
+    decision = dict(result)
+    decision.update(policy)
+    decision["action"] = decision_action(policy["decision"])
+    return decision
+
 # Conservative filename signals. They are only used when extension/MIME data
 # does not already provide a stronger deterministic classification.
 NAME_HINTS = {
@@ -167,7 +189,7 @@ def classify_folder(folder: str | Path, categories: dict[str, set[str]], recursi
     results = []
     for path in iter_files(folder, recursive):
         result = classify_file(path, categories)
-        result.update(confidence_policy(result["confidence"]))
+        result = build_decision(result)
         result["source"] = str(path)
         results.append(result)
     return results
