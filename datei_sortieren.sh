@@ -781,7 +781,7 @@ if $WATCH; then
   declare -A BEKANNTE_DATEIEN
   shopt -s nullglob
   for DATEI in "$ZIEL"/*; do
-    [ -f "$DATEI" ] && BEKANNTE_DATEIEN["${DATEI##*/}"]=1
+    [ -f "$DATEI" ] && BEKANNTE_DATEIEN["$DATEI"]="$(stat -c '%s:%Y' "$DATEI" 2>/dev/null || stat -f '%z:%m' "$DATEI" 2>/dev/null || echo unknown)"
   done
   shopt -u nullglob
   echo -e "${CYAN}${#BEKANNTE_DATEIEN[@]} bestehende Datei(en) ignoriert.${RESET}"
@@ -791,15 +791,15 @@ if $WATCH; then
     shopt -s nullglob
     for DATEI in "$ZIEL"/*; do
       [ -f "$DATEI" ] || continue
-      DATEINAME="${DATEI##*/}"
-      [ "$DATEINAME" = ".sortier_log.txt" ] && continue
-      if [ -z "${BEKANNTE_DATEIEN[$DATEINAME]+x}" ]; then
-        echo -e "${CYAN}[$(date '+%H:%M:%S')] $DATEINAME${RESET}"
+      [ "${DATEI##*/}" = ".sortier_log.txt" ] && continue
+      SIGNATUR="$(stat -c '%s:%Y' "$DATEI" 2>/dev/null || stat -f '%z:%m' "$DATEI" 2>/dev/null || echo unknown)"
+      if [ -z "${BEKANNTE_DATEIEN[$DATEI]+x}" ] || [ "${BEKANNTE_DATEIEN[$DATEI]}" != "$SIGNATUR" ]; then
+        echo -e "${CYAN}[$(date '+%H:%M:%S')] ${DATEI##*/}${RESET}"
         DATUM_LOG=$(date '+%d.%m.%Y %H:%M')
         sortiere_datei "$DATEI" "$ZIEL" "false" "$LOGDATEI" "$NACH_DATUM" "$DATUM_LOG"
         RET=$?
-        $NOTIFY && [ $RET -le 1 ] && sende_notification "Datei-Sortierer" "$DATEINAME sortiert"
-        BEKANNTE_DATEIEN["$DATEINAME"]=1; NEUE=$((NEUE+1))
+        $NOTIFY && [ $RET -le 1 ] && sende_notification "Datei-Sortierer" "${DATEI##*/} verarbeitet"
+        BEKANNTE_DATEIEN["$DATEI"]="$SIGNATUR"; NEUE=$((NEUE+1))
       fi
     done
     shopt -u nullglob
