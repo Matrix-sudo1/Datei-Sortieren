@@ -231,8 +231,8 @@ events=[e for e in p["events"] if e["event"]=="intelligent"]
 assert len(events)==4, p
 by_name={e["source"].split("/")[-1]:e for e in events}
 assert by_name["foto.jpg"]["category"]=="Bilder" and by_name["foto.jpg"]["confidence"]==1.0, p
-assert by_name["rechnung.pdf"]["category"]=="Dokumente" and by_name["rechnung.pdf"]["source"]=="extension", p
-assert by_name["project_notes.zzz"]["category"]=="Code" and by_name["project_notes.zzz"]["source"]=="filename", p
+assert by_name["rechnung.pdf"]["category"]=="Dokumente" and by_name["rechnung.pdf"]["signal"]=="extension", p
+assert by_name["project_notes.zzz"]["category"]=="Code" and by_name["project_notes.zzz"]["signal"]=="filename", p
 assert by_name["mystery.zzz"]["category"]=="Sonstiges" and by_name["mystery.zzz"]["confidence"]==0.0, p
 '
 before=$(find "$TMP/intelligent" -type f -print | sort | sha256sum)
