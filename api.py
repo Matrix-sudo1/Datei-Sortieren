@@ -208,6 +208,29 @@ def pid_alive(pid: int) -> bool:
     return True
 
 
+def automation_process_matches(pid: int, folder: str) -> bool:
+    """Fail closed unless the PID still belongs to our watch command."""
+    if pid <= 0:
+        return False
+    proc_cmdline = Path(f"/proc/{pid}/cmdline")
+    try:
+        raw = proc_cmdline.read_bytes()
+    except OSError:
+        return False
+    argv = [part.decode("utf-8", errors="replace") for part in raw.split(b"\\x00") if part]
+    if not argv:
+        return False
+    root = str(Path(folder).expanduser().resolve())
+    engine = str(ENGINE.resolve())
+    return (
+        "--watch" in argv
+        and engine in argv
+        and root in argv
+        and argv[0].endswith("/bash")
+    )
+
+
+
 def automation_status(folder: str) -> dict:
     _, state_path = automation_paths(folder)
     state = read_state(state_path)
@@ -215,12 +238,12 @@ def automation_status(folder: str) -> dict:
         return {"status": "stopped", "message": "no automation state"}
 
     pid = int(state.get("pid", 0) or 0)
-    if not pid_alive(pid):
+    if not pid_alive(pid) or not automation_process_matches(pid, state.get("folder") or ""):
         try:
             state_path.unlink()
         except FileNotFoundError:
             pass
-        return {"status": "stopped", "message": "automation process is not running"}
+        return {"status": "stopped", "message": "automation process is not the expected watch process"}
 
     return {
         "status": state.get("status", "running"),
@@ -288,12 +311,12 @@ def automation_signal(folder: str, action: str) -> tuple[bool, dict]:
     if not state:
         return False, {"status": "stopped", "message": "no automation state"}
     pid = int(state.get("pid", 0) or 0)
-    if not pid_alive(pid):
+    if not pid_alive(pid) or not automation_process_matches(pid, state.get("folder") or ""):
         try:
             state_path.unlink()
         except FileNotFoundError:
             pass
-        return False, {"status": "stopped", "message": "automation process is not running"}
+        return False, {"status": "stopped", "message": "automation process is not the expected watch process"}
 
     signals = {"stop": signal.SIGTERM, "pause": signal.SIGSTOP, "resume": signal.SIGCONT}
     os.kill(pid, signals[action])
@@ -634,6 +657,8 @@ def main() -> int:
             if ns.command == "automation-start" and ns.interval < 1:
                 raise ValueError("interval must be a positive integer")
             if ns.command == "automation-start":
+        if ns.interval < 1 or ns.interval > 86400:
+            return json_response(False, 2, [{"event": "automation", "status": "error", "message": "interval must be between 1 and 86400 seconds"}])
                 options = {
                     "recursive": ns.recursive,
                     "date": ns.date,
