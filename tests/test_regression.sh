@@ -232,7 +232,7 @@ assert len(events)==4, p
 by_name={e["source"].split("/")[-1]:e for e in events}
 assert by_name["foto.jpg"]["category"]=="Bilder" and by_name["foto.jpg"]["confidence"]==1.0, p
 assert by_name["rechnung.pdf"]["category"]=="Dokumente" and by_name["rechnung.pdf"]["signal"]=="extension", p
-assert by_name["project_notes.zzz"]["category"]=="Code" and by_name["project_notes.zzz"]["signal"]=="filename", p
+assert by_name["project_code.zzz"]["category"]=="Code" and by_name["project_code.zzz"]["signal"]=="filename", p
 assert by_name["mystery.zzz"]["category"]=="Sonstiges" and by_name["mystery.zzz"]["confidence"]==0.0 and by_name["mystery.zzz"]["signal"]=="fallback", p
 '
 before=$(find "$TMP/intelligent" -type f -print | sort | sha256sum)
@@ -250,7 +250,7 @@ grep -Fq 'reason' "$ROOT/gui.py" || fail "GUI zeigt Klassifizierungsgrund nicht 
 echo "[19/19] v9.0 Confidence-Policy Grenzwerte"
 python3 -c 'import sys; sys.path.insert(0, sys.argv[1]); from intelligent import confidence_policy; assert confidence_policy(1.0)["decision"] == "auto"; assert confidence_policy(0.85)["decision"] == "auto"; assert confidence_policy(0.84)["decision"] == "review"; assert confidence_policy(0.65)["decision"] == "review"; assert confidence_policy(0.64)["decision"] == "leave"; assert confidence_policy(0.0)["decision"] == "leave"' "$ROOT"
 POLICY_OUTPUT=$(python3 "$ROOT/api.py" intelligent-preview "$TMP/intelligent")
-printf '%s' "$POLICY_OUTPUT" | python3 -c 'import json,sys; p=json.load(sys.stdin); events=[e for e in p["events"] if e["event"]=="intelligent"]; by_name={e["source"].split("/")[-1]:e for e in events}; assert by_name["foto.jpg"]["decision"]=="auto" and by_name["foto.jpg"]["confidence_band"]=="high", p; assert by_name["project_notes.zzz"]["decision"]=="review" and by_name["project_notes.zzz"]["confidence_band"]=="medium", p; assert by_name["mystery.zzz"]["decision"]=="leave" and by_name["mystery.zzz"]["confidence_band"]=="low", p'
+printf '%s' "$POLICY_OUTPUT" | python3 -c 'import json,sys; p=json.load(sys.stdin); events=[e for e in p["events"] if e["event"]=="intelligent"]; by_name={e["source"].split("/")[-1]:e for e in events}; assert by_name["foto.jpg"]["decision"]=="auto" and by_name["foto.jpg"]["confidence_band"]=="high", p; assert by_name["project_code.zzz"]["decision"]=="review" and by_name["project_code.zzz"]["confidence_band"]=="medium", p; assert by_name["mystery.zzz"]["decision"]=="leave" and by_name["mystery.zzz"]["confidence_band"]=="low", p'
 grep -Fq 'Nicht automatisch' "$ROOT/gui.py" || fail "GUI zeigt Leave-Policy nicht an"
 grep -Fq 'Prüfen' "$ROOT/gui.py" || fail "GUI zeigt Review-Policy nicht an"
 
