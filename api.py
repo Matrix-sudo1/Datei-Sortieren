@@ -421,6 +421,8 @@ def main() -> int:
 
     if ns.command.startswith("automation-"):
         try:
+            if ns.command == "automation-start" and ns.interval < 1:
+                raise ValueError("interval must be a positive integer")
             if ns.command == "automation-start":
                 options = {
                     "recursive": ns.recursive,
