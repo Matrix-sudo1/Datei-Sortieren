@@ -10,12 +10,12 @@ fail() { echo "FAIL: $*" >&2; exit 1; }
 assert_file() { [ -f "$1" ] || fail "Datei fehlt: $1"; }
 assert_not_file() { [ ! -f "$1" ] || fail "Datei unerwartet vorhanden: $1"; }
 
-echo "[1/5] Bash-Syntax"
+echo "[1/6] Bash-Syntax"
 bash -n "$SCRIPT"
 python3 -m py_compile "$ROOT/gui.py"
 rm -rf "$ROOT/__pycache__"
 
-echo "[2/5] Standard-Sortierung"
+echo "[2/6] Standard-Sortierung"
 mkdir -p "$TMP/basic"
 printf 'bild' > "$TMP/basic/foto.jpg"
 printf 'text' > "$TMP/basic/notiz.txt"
@@ -24,7 +24,7 @@ assert_file "$TMP/basic/Bilder/foto.jpg"
 assert_file "$TMP/basic/Dokumente/notiz.txt"
 assert_not_file "$TMP/basic/foto.jpg"
 
-echo "[3/5] Profile"
+echo "[3/6] Profile"
 mkdir -p "$TMP/profiles"
 printf 'foto' > "$TMP/profiles/bild.png"
 bash "$SCRIPT" "$TMP/profiles" --profil fotos >/dev/null
@@ -40,7 +40,7 @@ printf 'code' > "$TMP/profiles-dev/app.py"
 bash "$SCRIPT" "$TMP/profiles-dev" --profil entwickler >/dev/null
 assert_file "$TMP/profiles-dev/Code/app.py"
 
-echo "[4/5] Rekursiver Snapshot"
+echo "[4/6] Rekursiver Snapshot"
 mkdir -p "$TMP/recursive/nested"
 printf 'code' > "$TMP/recursive/nested/tool.py"
 bash "$SCRIPT" "$TMP/recursive" --unterordner >/dev/null
@@ -68,4 +68,4 @@ printf "image" > "$TMP/symlink/photo.jpg"
 bash "$SCRIPT" "$TMP/symlink" >/dev/null 2>&1 || true
 assert_file "$TMP/symlink/photo.jpg"
 
- echo "PASS: v8.0 regression tests"
+echo "PASS: v8.1 regression tests"
