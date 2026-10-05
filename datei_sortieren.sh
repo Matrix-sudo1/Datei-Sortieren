@@ -1,6 +1,6 @@
 #!/bin/bash
 # ============================================
-#  Datei-Sortierer v7.1
+#  Datei-Sortierer v8.0
 #  Optimierungen gegenüber v7.0:
 #  - $(basename) → ${f##*/}  (84x schneller)
 #  - $(tr lower) → ${v,,}    (47x schneller)
@@ -103,7 +103,7 @@ in_papierkorb() {
 hilfe() {
   echo -e "${CYAN}"
   echo "╔══════════════════════════════════════════════╗"
-  echo "║         Datei-Sortierer v7.1                 ║"
+  echo "║         Datei-Sortierer v8.0                 ║"
   echo "╚══════════════════════════════════════════════╝"
   echo -e "${RESET}"
   echo "Verwendung:  ./datei_sortieren.sh [ORDNER] [OPTIONEN]"
@@ -393,7 +393,7 @@ _lade_standard_kategorien() {
 }
 
 # ============================================
-#  LOG  (Tab-Separator: kann nicht in Dateinamen vorkommen)
+#  LOG  (Legacy-Format; v8.0 validiert Dateipfade vor dem Schreiben)
 # ============================================
 log_schreiben() {
   local LOGDATEI="$1" QUELLE="$2" ZIEL_DATEI="$3" DATUM="$4"
@@ -471,7 +471,7 @@ bericht_schreiben() {
   <div class="card"><div class="num lila">$GESAMT</div><div class="lbl">Gesamt</div></div>
 </div>
 <div class="section"><h2>📊 Kategorien</h2>$KAT_HTML</div>
-<div class="meta">Start: $BERICHT_START &nbsp;|&nbsp; Ende: $ENDE &nbsp;|&nbsp; v7.1</div>
+<div class="meta">Start: $BERICHT_START &nbsp;|&nbsp; Ende: $ENDE &nbsp;|&nbsp; v8.0</div>
 </body></html>
 HTMLEOF
 
@@ -637,7 +637,7 @@ sortiere_ordner() {
         2) IGNORIERT=$((IGNORIERT+1)); BERICHT_IGNORIERT=$((BERICHT_IGNORIERT+1)) ;;
         3) FEHLER_ANZ=$((FEHLER_ANZ+1)); BERICHT_FEHLER=$((BERICHT_FEHLER+1)) ;;
       esac
-    done < <(find "$ORDNER" -type f -not -name ".sortier_log.txt" -print0 2>/dev/null)
+    # Snapshot der Quellen erstellen, damit neu angelegte Zielverzeichnisse\n    # nicht waehrend desselben Laufs erneut verarbeitet werden.\n    local SNAPSHOT\n    SNAPSHOT=$(mktemp 2>/dev/null) || {\n      echo -e "${ROT}Fehler: Snapshot-Datei konnte nicht erstellt werden.${RESET}"\n      return 1\n    }\n    find "$ORDNER" -type f -not -name ".sortier_log.txt" -print0 > "$SNAPSHOT" 2>/dev/null\n    while IFS= read -r -d '' DATEI; do\n      local DATEINAME="${DATEI##*/}"\n      [ "$DATEINAME" = ".sortier_log.txt" ] && continue\n      local RET\n      sortiere_datei "$DATEI" "$ORDNER" "$DRYRUN" "$LOGDATEI" "$NACH_DATUM" "$DATUM_LOG"\n      RET=$?\n      case $RET in\n        0) VERSCHOBEN=$((VERSCHOBEN+1)); BERICHT_VERSCHOBEN=$((BERICHT_VERSCHOBEN+1)) ;;\n        1) SONSTIGES=$((SONSTIGES+1)) ;;\n        2) IGNORIERT=$((IGNORIERT+1)); BERICHT_IGNORIERT=$((BERICHT_IGNORIERT+1)) ;;\n        3) FEHLER_ANZ=$((FEHLER_ANZ+1)); BERICHT_FEHLER=$((BERICHT_FEHLER+1)) ;;\n      esac\n    done < "$SNAPSHOT"\n    rm -f "$SNAPSHOT"
   else
     shopt -s nullglob
     for DATEI in "$ORDNER"/*; do
