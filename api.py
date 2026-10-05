@@ -18,7 +18,7 @@ from pathlib import Path
 import signal
 import time
 
-from intelligent import classify_folder, load_categories, confidence_policy
+from intelligent import (classify_folder, load_categories, confidence_policy, load_learning_rules, add_learning_rule, remove_learning_rule, rules_path)
 
 API_VERSION = "1"
 ROOT = Path(__file__).resolve().parent
@@ -424,6 +424,20 @@ def build_parser() -> argparse.ArgumentParser:
         action = sub.add_parser(command)
         action.add_argument("folder")
 
+    rules = sub.add_parser("intelligent-rules", help="list deterministic learning rules")
+    rules.add_argument("folder")
+    rules.add_argument("--profile")
+    rules.add_argument("--config")
+    rule_add = sub.add_parser("intelligent-rule-add", help="add a deterministic learning rule")
+    rule_add.add_argument("folder")
+    rule_add.add_argument("--source", choices=["extension", "mime", "filename_token"], required=True)
+    rule_add.add_argument("--pattern", required=True)
+    rule_add.add_argument("--category", required=True)
+    rule_add.add_argument("--id")
+    rule_remove = sub.add_parser("intelligent-rule-remove", help="remove a deterministic learning rule")
+    rule_remove.add_argument("folder")
+    rule_remove.add_argument("--id", required=True)
+
     sub.add_parser("profiles", help="list available profiles")
     return parser
 
@@ -439,6 +453,35 @@ def main() -> int:
             [{"event": "error", "status": "error", "message": str(exc)}],
         )
 
+    if ns.command in {"intelligent-rules", "intelligent-rule-add", "intelligent-rule-remove"}:
+        if not os.path.isdir(ns.folder):
+            return json_response(False, 2, [{"event": "error", "status": "error", "message": f"folder not found: {ns.folder}"}])
+        try:
+            config_path = ns.config if getattr(ns, "config", None) else None
+            profile = getattr(ns, "profile", None)
+            if profile:
+                if not CATEGORY_RE.fullmatch(profile):
+                    raise ValueError("invalid profile name")
+                config_path = str(ROOT / "profile" / f"{profile}.txt")
+            categories = load_categories(config_path or str(ROOT / "config.txt"))
+            if ns.command == "intelligent-rules":
+                rules = load_learning_rules(ns.folder, categories)
+                return json_response(True, 0, [{"event": "learning-rule", "status": "ok", **rule} for rule in rules])
+            if ns.command == "intelligent-rule-add":
+                rule_id = ns.id or f"{ns.source}-{ns.pattern.lower()}-{ns.category.lower()}".replace(" ", "-")
+                rule, path = add_learning_rule(ns.folder, {
+                    "id": rule_id,
+                    "source": ns.source,
+                    "pattern": ns.pattern,
+                    "category": ns.category,
+                    "enabled": True,
+                }, categories)
+                return json_response(True, 0, [{"event": "learning-rule", "status": "created", **rule, "path": str(path)}])
+            path = remove_learning_rule(ns.folder, ns.id, categories)
+            return json_response(True, 0, [{"event": "learning-rule", "status": "removed", "id": ns.id, "path": str(path)}])
+        except (OSError, ValueError) as exc:
+            return json_response(False, 2, [{"event": "learning-rule", "status": "error", "message": str(exc)}])
+
     if ns.command == "intelligent-sort":
         if not os.path.isdir(ns.folder):
             return json_response(False, 2, [{"event": "error", "status": "error", "message": f"folder not found: {ns.folder}"}])
@@ -449,7 +492,8 @@ def main() -> int:
                     raise ValueError("invalid profile name")
                 config_path = str(ROOT / "profile" / f"{ns.profile}.txt")
             categories = load_categories(config_path or str(ROOT / "config.txt"))
-            results = classify_folder(ns.folder, categories, ns.recursive)
+            learning_rules = load_learning_rules(ns.folder, categories)
+            results = classify_folder(ns.folder, categories, ns.recursive, learning_rules)
             plan_hash = intelligent_plan_hash(results)
             eligible = [r for r in results if r.get("decision") == "auto" or (ns.include_review and r.get("decision") == "review")]
             if ns.plan_hash and ns.plan_hash != plan_hash:
@@ -537,7 +581,8 @@ def main() -> int:
                     raise ValueError("invalid profile name")
                 config_path = str(ROOT / "profile" / f"{ns.profile}.txt")
             categories = load_categories(config_path or str(ROOT / "config.txt"))
-            results = classify_folder(ns.folder, categories, ns.recursive)
+            learning_rules = load_learning_rules(ns.folder, categories)
+            results = classify_folder(ns.folder, categories, ns.recursive, learning_rules)
         except (OSError, ValueError) as exc:
             return json_response(False, 2, [{"event": "error", "status": "error", "message": str(exc)}])
         events = [{"event": "intelligent", "status": "ok", **item} for item in results]
