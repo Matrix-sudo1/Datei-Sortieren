@@ -9,6 +9,7 @@ from __future__ import annotations
 import argparse
 import re
 import json
+import hashlib
 import os
 import subprocess
 import sys
@@ -324,6 +325,26 @@ def automation_profiles() -> list[dict]:
     return result
 
 
+def intelligent_plan_hash(results: list[dict]) -> str:
+    """Return a deterministic fingerprint for a freshly classified file set."""
+    snapshot = []
+    for item in results:
+        source = Path(item["source"]).expanduser().resolve()
+        if not source.is_file() or source.is_symlink():
+            raise ValueError(f"invalid intelligent plan source: {source}")
+        st = source.stat()
+        snapshot.append({
+            "source": str(source),
+            "category": item.get("category", "Sonstiges"),
+            "confidence": item.get("confidence", 0.0),
+            "decision": item.get("decision", "leave"),
+            "reason": item.get("reason", ""),
+            "signature": f"{st.st_dev}:{st.st_ino}:{st.st_size}:{int(st.st_mtime)}",
+        })
+    encoded = json.dumps(snapshot, ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode("utf-8")
+    return hashlib.sha256(encoded).hexdigest()
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = JsonArgumentParser(description="JSON API for Datei-Sortierer v9.0")
     sub = parser.add_subparsers(dest="command", required=True)
@@ -340,6 +361,8 @@ def build_parser() -> argparse.ArgumentParser:
     intelligent_sort.add_argument("--config")
     intelligent_sort.add_argument("--confirm", action="store_true")
     intelligent_sort.add_argument("--include-review", action="store_true")
+    intelligent_sort.add_argument("--select", action="append", default=[])
+    intelligent_sort.add_argument("--plan-hash")
 
     def common(p: argparse.ArgumentParser) -> None:
         p.add_argument("folder")
@@ -412,9 +435,18 @@ def main() -> int:
                 config_path = str(ROOT / "profile" / f"{ns.profile}.txt")
             categories = load_categories(config_path or str(ROOT / "config.txt"))
             results = classify_folder(ns.folder, categories, ns.recursive)
+            plan_hash = intelligent_plan_hash(results)
             eligible = [r for r in results if r.get("decision") == "auto" or (ns.include_review and r.get("decision") == "review")]
+            if ns.plan_hash and ns.plan_hash != plan_hash:
+                return json_response(False, 2, [{"event": "intelligent-sort", "status": "stale_plan", "message": "Intelligent plan is stale; please refresh the preview."}])
             if not ns.confirm:
                 return json_response(True, 0, [{"event": "intelligent-sort", "status": "confirmation_required", "eligible": len(eligible), "review": sum(1 for r in results if r.get("decision") == "review"), "leave": sum(1 for r in results if r.get("decision") == "leave"), "message": "Explicit confirmation required; no files changed."}])
+            if ns.select:
+                selected = {str(Path(value).expanduser().resolve()) for value in ns.select}
+                eligible_by_source = {str(Path(item["source"]).expanduser().resolve()): item for item in eligible}
+                if selected - set(eligible_by_source):
+                    return json_response(False, 2, [{"event": "intelligent-sort", "status": "invalid_selection", "message": "Selection contains files that are no longer eligible."}])
+                eligible = [eligible_by_source[source] for source in sorted(selected)]
             if not eligible:
                 return json_response(True, 0, [{"event": "intelligent-sort", "status": "nothing_to_sort", "message": "No confirmed intelligent proposals eligible for sorting."}])
             import tempfile
@@ -461,6 +493,7 @@ def main() -> int:
         except (OSError, ValueError) as exc:
             return json_response(False, 2, [{"event": "error", "status": "error", "message": str(exc)}])
         events = [{"event": "intelligent", "status": "ok", **item} for item in results]
+        events.append({"event": "intelligent-plan", "status": "ready", "plan_hash": intelligent_plan_hash(results), "count": len(results)})
         return json_response(True, 0, events)
 
     if ns.command in {"preview", "sort"}:
