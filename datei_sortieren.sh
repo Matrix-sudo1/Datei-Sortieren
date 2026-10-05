@@ -251,7 +251,16 @@ cronjob_einrichten() {
   if [[ "$ORDNER" =~ [^[:print:]] ]]; then
     echo -e "${ROT}Fehler: Pfad enthält nicht-druckbare Zeichen.${RESET}"; exit 1
   fi
-  # Shell-sichere Einzelquotierung: Pfade koennen Sonderzeichen enthalten, ohne Cron-Shell-Syntax zu aktivieren.\n  cron_quote() {\n    local VALUE="$1"\n    VALUE="${VALUE//\'/\'\\\'\'}"\n    printf "'%s'" "$VALUE"\n  }\n  local SCRIPT_QUOTED ORDNER_QUOTED\n  SCRIPT_QUOTED=$(cron_quote "$SCRIPT_PFAD")\n  ORDNER_QUOTED=$(cron_quote "$ORDNER")\n  local CRON_CMD="$MINUTE $STUNDE * * * bash $SCRIPT_QUOTED $ORDNER_QUOTED $CRONJOB_TAG"
+  # Shell-sichere Einzelquotierung: Pfade koennen Sonderzeichen enthalten, ohne Cron-Shell-Syntax zu aktivieren.
+  cron_quote() {
+    local VALUE="$1"
+    VALUE="${VALUE//\'/\'\\\'\'}"
+    printf "'%s'" "$VALUE"
+  }
+  local SCRIPT_QUOTED ORDNER_QUOTED
+  SCRIPT_QUOTED=$(cron_quote "$SCRIPT_PFAD")
+  ORDNER_QUOTED=$(cron_quote "$ORDNER")
+  local CRON_CMD="$MINUTE $STUNDE * * * bash $SCRIPT_QUOTED $ORDNER_QUOTED $CRONJOB_TAG"
   # PATCH: Sicherstellen, dass der Eintrag wirklich nur eine Zeile ist
   if [[ "$(printf '%s' "$CRON_CMD" | wc -l)" -gt 0 ]]; then
     if printf '%s' "$CRON_CMD" | grep -q $'\n'; then
