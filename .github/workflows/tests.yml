@@ -2,7 +2,7 @@ name: Tests
 
 on:
   push:
-    branches: ["main", "v8-refactor", "v8.2-final"]
+    branches: ["main"]
   pull_request:
     branches: ["main"]
 
