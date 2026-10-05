@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Stable JSON adapter for Datei-Sortierer v8.8.
+"""Stable JSON adapter for Datei-Sortierer v9.0.
 
 The Bash script remains the single source of truth for sorting behaviour.
 This module exposes structured JSON for GUI and automation clients.
@@ -15,6 +15,8 @@ import sys
 from pathlib import Path
 import signal
 import time
+
+from intelligent import classify_folder, load_categories
 
 API_VERSION = "1"
 ROOT = Path(__file__).resolve().parent
@@ -326,6 +328,12 @@ def build_parser() -> argparse.ArgumentParser:
     parser = JsonArgumentParser(description="JSON API for Datei-Sortierer v8.8")
     sub = parser.add_subparsers(dest="command", required=True)
 
+    intelligent = sub.add_parser("intelligent-preview", help="deterministic intelligent classification preview")
+    intelligent.add_argument("folder")
+    intelligent.add_argument("--recursive", action="store_true")
+    intelligent.add_argument("--profile")
+    intelligent.add_argument("--config")
+
     def common(p: argparse.ArgumentParser) -> None:
         p.add_argument("folder")
         p.add_argument("--recursive", action="store_true")
@@ -385,6 +393,21 @@ def main() -> int:
             2,
             [{"event": "error", "status": "error", "message": str(exc)}],
         )
+
+    if ns.command == "intelligent-preview":
+        if not os.path.isdir(ns.folder):
+            return json_response(False, 2, [{"event": "error", "status": "error",
+                                             "message": f"folder not found: {ns.folder}"}])
+        try:
+            config_path = ns.config
+            if ns.profile:
+                config_path = str(ROOT / "profile" / f"{ns.profile}.txt")
+            categories = load_categories(config_path or str(ROOT / "config.txt"))
+            results = classify_folder(ns.folder, categories, ns.recursive)
+        except (OSError, ValueError) as exc:
+            return json_response(False, 2, [{"event": "error", "status": "error", "message": str(exc)}])
+        events = [{"event": "intelligent", "status": "ok", **item} for item in results]
+        return json_response(True, 0, events)
 
     if ns.command in {"preview", "sort"}:
         if not os.path.isdir(ns.folder):
