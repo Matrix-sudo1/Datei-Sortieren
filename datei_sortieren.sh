@@ -491,6 +491,24 @@ HTMLEOF
 }
 
 # ============================================
+#  SICHERE ZIELORDNER
+# ============================================
+# Verhindert, dass ein bereits vorhandener Symlink als automatisch
+# erzeugter Zielordner verwendet wird.
+zielordner_sicher() {
+  local ORDNER="$1"
+  local KOMPONENTE
+  for KOMPONENTE in "${ORDNER%/*}" "$ORDNER"; do
+    [ -z "$KOMPONENTE" ] && continue
+    if [ -L "$KOMPONENTE" ]; then
+      echo -e "${ROT}Fehler: Zielordner ist ein Symlink: $KOMPONENTE${RESET}" >&2
+      return 1
+    fi
+  done
+  return 0
+}
+
+# ============================================
 #  DATEI SORTIEREN  (OPT: keine Subshells mehr)
 # ============================================
 sortiere_datei() {
@@ -536,6 +554,8 @@ sortiere_datei() {
     if [ "$DRYRUN_FLAG" = "true" ]; then
       echo -e "${BLAU}VORSCHAU: $DATEINAME  ->  $JAHR/$MONAT/${RESET}"
     else
+      zielordner_sicher "$ZIELORDNER" || return 3
+      zielordner_sicher "$ZIELORDNER" || return 3
       mkdir -p "$ZIELORDNER" 2>/dev/null || { echo -e "${ROT}Fehler mkdir: $ZIELORDNER${RESET}"; return 3; }
       if $KOPIEREN; then
         cp -- "$DATEI" "$ZIELDATEI" 2>/dev/null
@@ -598,6 +618,7 @@ sortiere_datei() {
   if [ "$DRYRUN_FLAG" = "true" ]; then
     echo -e "${GELB}VORSCHAU: $DATEINAME  ->  Sonstiges/${RESET}"
   else
+    zielordner_sicher "$ZIELORDNER" || return 3
     mkdir -p "$ZIELORDNER" 2>/dev/null || return 3
     if $KOPIEREN; then
       cp -- "$DATEI" "$ZIELDATEI" 2>/dev/null
