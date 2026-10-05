@@ -585,7 +585,7 @@ zielordner_sicher() {
 #  RACE-/TOCTOU-SCHUTZ
 # ============================================
 datei_signatur() {
-  local DATEI="$1
+  local DATEI="$1"
   if stat -c '%d:%i:%s:%Y' "$DATEI" 2>/dev/null; then return 0; fi
   stat -f '%d:%i:%z:%m' "$DATEI" 2>/dev/null
 }
@@ -596,6 +596,7 @@ datei_unveraendert() {
   [ ! -L "$DATEI" ] || return 1
   AKTUELL=$(datei_signatur "$DATEI") || return 1
   [ "$AKTUELL" = "$ERWARTET" ]
+}
 
 # ============================================
 #  DATEI SORTIEREN  (OPT: keine Subshells mehr)
