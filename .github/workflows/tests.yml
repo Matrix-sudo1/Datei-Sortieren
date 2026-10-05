@@ -1,0 +1,15 @@
+name: Tests
+
+on:
+  push:
+    branches: ["main", "v8-refactor"]
+  pull_request:
+    branches: ["main"]
+
+jobs:
+  bash-tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Run regression tests
+        run: bash tests/test_regression.sh
