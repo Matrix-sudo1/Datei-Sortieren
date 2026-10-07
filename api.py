@@ -158,7 +158,7 @@ def _to_bash_path(value: str) -> str:
         rest = value[2:].replace("\\", "/").lstrip("/")
         return f"/{drive}/{rest}"
     if value.startswith("\\\\"):
-        return "//" + value.lstrip("\").replace("\\", "/")
+        return "//" + value.lstrip("\\").replace("\\", "/")
     return value.replace("\\", "/")
 
 
