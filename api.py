@@ -14,6 +14,7 @@ from datetime import datetime, timezone
 import os
 import subprocess
 import sys
+import shutil
 from pathlib import Path
 import signal
 import time
@@ -131,6 +132,55 @@ def parse_events(stdout: str) -> list[dict]:
     return events
 
 
+def _find_bash() -> str | None:
+    """Return a usable Bash executable on Windows and POSIX systems."""
+    bash = shutil.which("bash")
+    if bash:
+        return bash
+    if os.name == "nt":
+        for candidate in (
+            r"C:\Program Files\Git\bin\bash.exe",
+            r"C:\Program Files (x86)\Git\bin\bash.exe",
+        ):
+            if os.path.isfile(candidate):
+                return candidate
+    return None
+
+
+def _to_bash_path(value: str) -> str:
+    """Convert native Windows paths to paths understood by Git Bash."""
+    if os.name != "nt":
+        return value
+    value = os.path.expanduser(value)
+    # Git Bash accepts /c/... for C:\... and //server/share for UNC paths.
+    if re.match(r"^[A-Za-z]:[\\/]", value):
+        drive = value[0].lower()
+        rest = value[2:].replace("\\", "/").lstrip("/")
+        return f"/{drive}/{rest}"
+    if value.startswith("\\\\"):
+        return "//" + value.lstrip("\").replace("\\", "/")
+    return value.replace("\\", "/")
+
+
+def _engine_command(args: list[str]) -> list[str] | None:
+    """Build one consistent Bash command for all API engine operations."""
+    bash = _find_bash()
+    if not bash:
+        return None
+
+    converted: list[str] = []
+    path_value_flags = {"--config", "--ignore", "--intelligent-plan"}
+    previous_flag = None
+    for value in args:
+        if previous_flag in path_value_flags or not converted:
+            converted.append(_to_bash_path(value))
+        else:
+            converted.append(value)
+        previous_flag = value if value in path_value_flags else None
+
+    return [bash, _to_bash_path(str(ENGINE)), *converted, "--json"]
+
+
 def run_engine(args: list[str]) -> int:
     if not ENGINE.is_file():
         return json_response(
@@ -140,9 +190,18 @@ def run_engine(args: list[str]) -> int:
               "message": f"Engine not found: {ENGINE}"}],
         )
 
+    command = _engine_command(args)
+    if command is None:
+        return json_response(
+            False,
+            126,
+            [{"event": "error", "status": "error",
+              "message": "Bash/Git Bash wurde nicht gefunden. Bitte Git for Windows installieren."}],
+        )
+
     try:
         proc = subprocess.run(
-            ["bash", str(ENGINE), *args, "--json"],
+            command,
             stdout=subprocess.PIPE,
             stderr=subprocess.STDOUT,
             text=True,
@@ -222,11 +281,12 @@ def automation_process_matches(pid: int, folder: str) -> bool:
         return False
     root = str(Path(folder).expanduser().resolve())
     engine = str(ENGINE.resolve())
+    bash_engine = _to_bash_path(engine)
     return (
         "--watch" in argv
-        and engine in argv
-        and root in argv
-        and (argv[0] == "bash" or argv[0].endswith("/bash"))
+        and (engine in argv or bash_engine in argv)
+        and (root in argv or _to_bash_path(root) in argv)
+        and ("bash" in Path(argv[0]).name.lower())
     )
 
 
@@ -278,10 +338,14 @@ def automation_start(folder: str, options: dict) -> tuple[bool, dict]:
 
     log_path = Path(root) / AUTOMATION_DIR_NAME / "automation.log"
     log_path.parent.mkdir(mode=0o700, exist_ok=True)
+    command = _engine_command(args)
+    if command is None:
+        return False, {"status": "error", "message": "Bash/Git Bash wurde nicht gefunden. Bitte Git for Windows installieren."}
+
     log_handle = open(log_path, "a", encoding="utf-8")
     try:
         proc = subprocess.Popen(
-            ["bash", *args],
+            command,
             stdin=subprocess.DEVNULL,
             stdout=log_handle,
             stderr=subprocess.STDOUT,
