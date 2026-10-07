@@ -321,7 +321,7 @@ def automation_start(folder: str, options: dict) -> tuple[bool, dict]:
         return False, current
 
     root = str(Path(folder).expanduser().resolve())
-    args = [str(ENGINE), root, "--watch"]
+    args = [root, "--watch"]
     if options.get("recursive"):
         args.append("--unterordner")
     if options.get("date"):
